@@ -147,6 +147,18 @@ func binaryName() string {
 	return "tokenwatch"
 }
 
+// CleanupStaleBackup removes a leftover "<exe>.old" left by a previous Windows
+// self-update. Safe at startup: once the new binary is running, the old file is
+// no longer in use. No-op on non-Windows.
+func CleanupStaleBackup() {
+	if runtime.GOOS != "windows" {
+		return
+	}
+	if exe, err := os.Executable(); err == nil {
+		_ = os.Remove(exe + ".old")
+	}
+}
+
 // IsHomebrew reports whether the running binary lives in a Homebrew Cellar
 // (the symlink in <prefix>/bin resolves into .../Cellar/...). brew-managed
 // binaries must be upgraded with `brew upgrade`, not self-replaced.
@@ -189,9 +201,10 @@ func SelfUpdate(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	exe, err = filepath.EvalSymlinks(exe)
-	if err != nil {
-		return "", err
+	// EvalSymlinks can fail on SUBST/UNC/junction paths or restricted parents;
+	// fall back to the raw executable path rather than aborting the upgrade.
+	if resolved, lerr := filepath.EvalSymlinks(exe); lerr == nil {
+		exe = resolved
 	}
 	dir := filepath.Dir(exe)
 
@@ -224,6 +237,10 @@ func SelfUpdate(ctx context.Context) (string, error) {
 			_ = os.Rename(old, exe) // best-effort rollback
 			return "", err
 		}
+		// The ".old" file is the now-renamed running image and usually can't be
+		// deleted until this process exits; CleanupStaleBackup() clears it on the
+		// next run. Try once anyway in case the OS allows it.
+		_ = os.Remove(old)
 		return rel.TagName, nil
 	}
 

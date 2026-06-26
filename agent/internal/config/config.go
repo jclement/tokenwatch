@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 )
 
 // DefaultServerURL is where uploads go unless overridden with --url.
@@ -104,10 +106,22 @@ func (c *Config) Save() error {
 	return os.Rename(tmp, c.path)
 }
 
+// normKey canonicalizes a path used as a fingerprint key. On Windows, paths are
+// case-insensitive and separators can vary, so we clean + lowercase to avoid
+// drive-letter / casing drift (e.g. across the install vs the scheduled-task
+// account) causing redundant re-scans and unbounded config growth.
+func normKey(path string) string {
+	p := filepath.Clean(path)
+	if runtime.GOOS == "windows" {
+		p = strings.ToLower(p)
+	}
+	return p
+}
+
 // Unchanged reports whether the file at path matches its stored fingerprint —
 // the signal to skip re-reading it on a continuous pass.
 func (c *Config) Unchanged(path string, fp Fingerprint) bool {
-	old, ok := c.FileFingerprints[path]
+	old, ok := c.FileFingerprints[normKey(path)]
 	return ok && old == fp
 }
 
@@ -116,7 +130,7 @@ func (c *Config) Remember(path string, fp Fingerprint) {
 	if c.FileFingerprints == nil {
 		c.FileFingerprints = map[string]Fingerprint{}
 	}
-	c.FileFingerprints[path] = fp
+	c.FileFingerprints[normKey(path)] = fp
 }
 
 // FingerprintOf computes the fingerprint for a file on disk.

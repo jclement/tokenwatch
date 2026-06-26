@@ -20,6 +20,17 @@ const SCHEDULER: Record<OS, string> = {
   win: "a Scheduled Task",
 };
 
+// On Windows the binary isn't on PATH, so commands need a .\ prefix and .exe.
+function stepTwo(os: OS): string {
+  const exe = os === "win" ? ".\\tokenwatch.exe" : "tokenwatch";
+  return [
+    `${exe}              # sync once now`,
+    `${exe} --continuous   # keep syncing in this window`,
+    `${exe} --install      # sync automatically in the background`,
+    `${exe} --uninstall    # stop background syncing`,
+  ].join("\n");
+}
+
 function detectOS(): OS {
   const ua = navigator.userAgent;
   if (/Windows/i.test(ua)) return "win";
@@ -133,12 +144,10 @@ export function PairingInstructions({ code }: { code: string }) {
         <div className="text-[12px] font-semibold text-subtle">2 · Sync once, or keep it running</div>
         <p className="text-[12px] text-faint">
           A one-shot sync runs immediately. To sync automatically in the background, install it as a
-          service — this registers {SCHEDULER[os]}.
+          service — this registers {SCHEDULER[os]}
+          {os === "win" && " and copies the agent to a stable location, so you can delete the download afterwards"}.
         </p>
-        <CodeBlock>{`tokenwatch            # sync once now
-tokenwatch --continuous   # stay running in this terminal
-tokenwatch --install      # run automatically in the background
-tokenwatch --uninstall    # stop the background service`}</CodeBlock>
+        <CodeBlock>{stepTwo(os)}</CodeBlock>
       </div>
     </div>
   );
@@ -184,7 +193,7 @@ tokenwatch --pair ${code}`}</CodeBlock>
         <ArchToggle arch={arch} setArch={setArch} />
         <CodeBlock>{`# PowerShell
 irm ${DL}/${asset} -OutFile tokenwatch.zip
-Expand-Archive tokenwatch.zip -DestinationPath .
+Expand-Archive tokenwatch.zip -DestinationPath . -Force
 .\\tokenwatch.exe --pair ${code}`}</CodeBlock>
       </>
     );

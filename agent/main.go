@@ -44,6 +44,9 @@ func main() {
 		return
 	}
 
+	// Best-effort: clear a leftover ".old" backup from a prior Windows upgrade.
+	updater.CleanupStaleBackup()
+
 	cfg, err := config.Load()
 	if err != nil {
 		fail("loading config: %v", err)
@@ -60,6 +63,11 @@ func main() {
 	case *pair != "":
 		runPair(ctx, cfg, *pair, *name)
 	case *install:
+		// Persist the effective server URL + device token so the scheduled
+		// `--once` runs against the right server (not just this in-memory --url).
+		if err := cfg.Save(); err != nil {
+			fail("install: saving config: %v", err)
+		}
 		if err := installScheduler(int(interval.Seconds())); err != nil {
 			fail("install: %v", err)
 		}
