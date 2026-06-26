@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -67,16 +68,66 @@ func New() *Parser {
 	return &Parser{HomeDir: home}
 }
 
-func (p *Parser) ClaudeDir() string { return filepath.Join(p.HomeDir, ".claude", "projects") }
-func (p *Parser) CodexDir() string  { return filepath.Join(p.HomeDir, ".codex", "sessions") }
+// claudeRoots returns every directory that may hold Claude Code transcripts,
+// honoring the CLAUDE_CONFIG_DIR override (Claude resolves all ~/.claude paths
+// under it) and, on Windows, best-effort WSL locations.
+func (p *Parser) claudeRoots() []string {
+	var roots []string
+	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+		roots = append(roots, filepath.Join(dir, "projects"))
+	} else {
+		roots = append(roots, filepath.Join(p.HomeDir, ".claude", "projects"))
+	}
+	return append(roots, wslRoots(".claude", "projects")...)
+}
 
-// Enumerate returns every *.jsonl file under both log directories, tagged with
-// its engine. Missing directories are silently skipped (a fresh machine may
-// only use one tool).
+// codexRoots is the Codex equivalent, honoring CODEX_HOME.
+func (p *Parser) codexRoots() []string {
+	var roots []string
+	if dir := os.Getenv("CODEX_HOME"); dir != "" {
+		roots = append(roots, filepath.Join(dir, "sessions"))
+	} else {
+		roots = append(roots, filepath.Join(p.HomeDir, ".codex", "sessions"))
+	}
+	return append(roots, wslRoots(".codex", "sessions")...)
+}
+
+// wslRoots discovers logs from Claude/Codex running inside WSL while this agent
+// runs as a native Windows binary (the logs live in the WSL filesystem, not the
+// Windows profile). Best-effort and Windows-only: globs every distro + user.
+// Set CLAUDE_CONFIG_DIR / CODEX_HOME to a \\wsl.localhost\... path to be explicit.
+func wslRoots(dotDir, sub string) []string {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, base := range []string{`\\wsl.localhost\`, `\\wsl$\`} {
+		matches, err := filepath.Glob(base + `*\home\*\` + dotDir + `\` + sub)
+		if err != nil {
+			continue
+		}
+		for _, m := range matches {
+			if !seen[m] {
+				seen[m] = true
+				out = append(out, m)
+			}
+		}
+	}
+	return out
+}
+
+// Enumerate returns every *.jsonl file under all candidate log directories,
+// tagged with its engine. Missing directories are silently skipped (a fresh
+// machine may only use one tool).
 func (p *Parser) Enumerate() []FileRef {
 	var out []FileRef
-	out = append(out, enumerate(p.ClaudeDir(), EngineClaude)...)
-	out = append(out, enumerate(p.CodexDir(), EngineCodex)...)
+	for _, dir := range p.claudeRoots() {
+		out = append(out, enumerate(dir, EngineClaude)...)
+	}
+	for _, dir := range p.codexRoots() {
+		out = append(out, enumerate(dir, EngineCodex)...)
+	}
 	return out
 }
 

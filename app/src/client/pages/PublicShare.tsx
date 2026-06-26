@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../api";
-import { GlassCard, StatCard, SectionTitle, LegendDot, COLORS, Spinner } from "../components/ui";
-import { SpendArea, TokenSplitBar } from "../components/charts";
-import { fmtMoney, fmtTokens } from "../../shared/format";
-import { totalTokens } from "../../shared/pricing";
+import { GlassCard, Spinner } from "../components/ui";
+import { PublicStatsView } from "../components/StatsView";
 import type { PublicStats } from "../../shared/types";
 
 export function PublicShare() {
@@ -41,7 +39,6 @@ export function PublicShare() {
     );
   }
 
-  const g = data.grandTotals;
   const name = data.user.displayName ?? data.user.username;
 
   return (
@@ -61,50 +58,7 @@ export function PublicShare() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-          <StatCard title="Total Damage" value={fmtMoney(data.grandCost)} accent="mint" glow />
-          <StatCard title="Total Tokens" value={fmtTokens(totalTokens(g))} accent="cyan" />
-          <StatCard title="Active Days" value={`${data.activeDays}`} accent="amber" />
-          <StatCard title="Longest Streak" value={`${data.streak.longest}d`} accent="coral" />
-        </div>
-
-        {data.timeline.length > 0 && (
-          <GlassCard className="mt-4">
-            <SectionTitle title="Spending, day by day" />
-            <div className="mt-3">
-              <SpendArea points={data.timeline} />
-            </div>
-          </GlassCard>
-        )}
-
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <GlassCard>
-            <SectionTitle title="Where it went" />
-            <div className="my-4">
-              <TokenSplitBar t={g} />
-            </div>
-            <div className="space-y-2.5">
-              <LegendDot color={COLORS.cyan} label="Fresh input" value={fmtTokens(g.input)} />
-              <LegendDot color={COLORS.amber} label="Cache writes" value={fmtTokens(g.cacheCreate)} />
-              <LegendDot color={COLORS.lime} label="Cache reads" value={fmtTokens(g.cacheRead)} />
-              <LegendDot color={COLORS.coral} label="Output" value={fmtTokens(g.output)} />
-            </div>
-          </GlassCard>
-          <GlassCard>
-            <SectionTitle title="Top models" />
-            <div className="mt-3 space-y-2.5">
-              {data.byModel.map((r) => (
-                <div key={r.label} className="flex items-center gap-2 text-[13px]">
-                  <span className="truncate" style={{ color: r.engine === "Claude" ? COLORS.amber : COLORS.cyan }}>
-                    {r.label}
-                  </span>
-                  <span className="ml-auto font-semibold tabular-nums">{fmtMoney(r.cost)}</span>
-                </div>
-              ))}
-              {data.byModel.length === 0 && <div className="text-[12px] text-faint">No models yet.</div>}
-            </div>
-          </GlassCard>
-        </div>
+        <PublicStatsView data={data} />
 
         {/* CTA footer */}
         <div className="mt-8 text-center">

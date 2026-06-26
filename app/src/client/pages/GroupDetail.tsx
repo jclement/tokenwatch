@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { api } from "../api";
 import { GlassCard, StatCard, SectionTitle, Button, COLORS } from "../components/ui";
 import { Loading } from "../components/state";
@@ -89,10 +89,12 @@ export function GroupDetailPage() {
                 <tr key={row.user.id} className="border-t border-white/5">
                   <td className="py-2 pr-2">{medals[i] ?? i + 1}</td>
                   <td className="py-2 pr-2">
-                    <div className="flex items-center gap-2">
+                    <Link to={`/groups/${g.slug}/members/${row.user.id}`} className="flex items-center gap-2 hover:text-mint">
                       <Avatar user={row.user} />
-                      <span className="font-medium">{row.user.displayName ?? row.user.username}</span>
-                    </div>
+                      <span className="font-medium underline-offset-2 hover:underline">
+                        {row.user.displayName ?? row.user.username}
+                      </span>
+                    </Link>
                   </td>
                   <td className="py-2 pr-2 text-right font-bold tabular-nums" style={{ color: COLORS.mint }}>{fmtMoney(row.cost)}</td>
                   <td className="py-2 pr-2 text-right tabular-nums text-subtle">{fmtTokens(row.tokens)}</td>

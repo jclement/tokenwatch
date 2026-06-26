@@ -47,6 +47,7 @@ export function Layout({ children }: { children: ReactNode }) {
 function SidebarContent({ seed, onNavigate }: { seed: number; onNavigate?: () => void }) {
   const personal = NAV.filter((n) => n.group === "personal");
   const social = NAV.filter((n) => n.group === "social");
+  const account = NAV.filter((n) => n.group === "account");
   return (
     <div className="flex h-full w-full flex-col">
       <div className="flex items-center gap-2.5 px-4 pb-4 pt-6">
@@ -65,7 +66,12 @@ function SidebarContent({ seed, onNavigate }: { seed: number; onNavigate?: () =>
           <NavItemLink key={n.to} {...n} onNavigate={onNavigate} />
         ))}
       </nav>
-      <div className="p-4 text-[11px] italic leading-snug text-faint">{sarcasm.tagline(seed)}</div>
+      <div className="space-y-0.5 border-t border-white/[0.06] px-2.5 py-2">
+        {account.map((n) => (
+          <NavItemLink key={n.to} {...n} onNavigate={onNavigate} />
+        ))}
+      </div>
+      <div className="px-4 pb-4 text-[11px] italic leading-snug text-faint">{sarcasm.tagline(seed)}</div>
     </div>
   );
 }

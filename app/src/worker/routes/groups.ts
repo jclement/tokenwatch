@@ -5,7 +5,7 @@ import { getDb } from "../db";
 import { groups, groupMembers, users } from "../../db/schema";
 import { requireAuth } from "../auth";
 import { randomId, slugify } from "../lib/crypto";
-import { groupRollups } from "../lib/aggregate";
+import { groupRollups, personalStats, toPublicStats } from "../lib/aggregate";
 import type { Group, GroupDetail, PublicUser, LeaderboardRow } from "../../shared/types";
 
 export const groupRoutes = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -131,6 +131,24 @@ groupRoutes.get("/:slug", async (c) => {
   } as GroupDetail & { inviteCode?: string };
 
   return c.json(detail);
+});
+
+// A single member's curated stats (same shape as the public share page),
+// visible only to fellow members of the group.
+groupRoutes.get("/:slug/members/:userId", async (c) => {
+  const db = getDb(c.env);
+  const requester = c.get("userId");
+  const targetId = c.req.param("userId");
+  const g = await db.query.groups.findFirst({ where: eq(groups.slug, c.req.param("slug")) });
+  if (!g) return c.notFound();
+  const members = await db.query.groupMembers.findMany({ where: eq(groupMembers.groupId, g.id) });
+  const ids = new Set(members.map((m) => m.userId));
+  if (!ids.has(requester)) return c.json({ error: "not a member" }, 403);
+  if (!ids.has(targetId)) return c.json({ error: "not in this group" }, 404);
+  const u = await db.query.users.findFirst({ where: eq(users.id, targetId) });
+  if (!u) return c.notFound();
+  const stats = await personalStats(c.env.DB, targetId);
+  return c.json(toPublicStats(publicUser(u), stats));
 });
 
 // Leave a group (owner leaving deletes it).

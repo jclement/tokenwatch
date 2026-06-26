@@ -75,6 +75,7 @@ export const api = {
   createGroup: (name: string) => post<{ id: string; slug: string; inviteCode: string }>("/groups", { name }),
   joinGroup: (inviteCode: string) => post<{ id: string; slug: string }>("/groups/join", { inviteCode }),
   group: (slug: string) => req<GroupDetail & { inviteCode?: string }>(`/groups/${slug}`),
+  groupMember: (slug: string, userId: string) => req<PublicStats>(`/groups/${slug}/members/${userId}`),
   leaveGroup: (slug: string) => post<{ ok: true }>(`/groups/${slug}/leave`),
 
   // version

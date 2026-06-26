@@ -11,6 +11,8 @@ import {
 } from "../../shared/pricing";
 import type {
   StatsPayload,
+  PublicStats,
+  PublicUser,
   DayPoint,
   BreakdownRow,
   HourBucket,
@@ -18,6 +20,24 @@ import type {
   StreakInfo,
   TextTotals,
 } from "../../shared/types";
+
+// Curate a full StatsPayload down to the read-only PublicStats shown on the
+// public /s/<token> page and on group member-detail pages.
+export function toPublicStats(user: PublicUser, stats: StatsPayload): PublicStats {
+  return {
+    user,
+    grandTotals: stats.grandTotals,
+    grandCost: stats.grandCost,
+    activeDays: stats.activeDays,
+    messages: stats.messages,
+    historyStart: stats.historyStart,
+    timeline: stats.timeline,
+    byEngine: stats.byEngine,
+    byModel: stats.byModel.slice(0, 6),
+    streak: stats.streak,
+    text: stats.text,
+  };
+}
 
 const DAY = 86_400;
 

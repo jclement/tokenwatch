@@ -17,6 +17,7 @@ import { HallOfFame } from "./pages/HallOfFame";
 import { Environmental } from "./pages/Environmental";
 import { GroupsPage } from "./pages/Groups";
 import { GroupDetailPage } from "./pages/GroupDetail";
+import { GroupMember } from "./pages/GroupMember";
 import { Settings } from "./pages/Settings";
 
 export function App() {
@@ -58,6 +59,7 @@ function AuthedApp() {
           <Route path="/environmental" element={<Environmental />} />
           <Route path="/groups" element={<GroupsPage />} />
           <Route path="/groups/:slug" element={<GroupDetailPage />} />
+          <Route path="/groups/:slug/members/:userId" element={<GroupMember />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

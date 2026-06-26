@@ -3,7 +3,7 @@ export interface NavItem {
   to: string;
   label: string;
   icon: string;
-  group: "personal" | "social";
+  group: "personal" | "social" | "account";
 }
 
 export const NAV: NavItem[] = [
@@ -18,5 +18,5 @@ export const NAV: NavItem[] = [
   { to: "/hall-of-fame", label: "Hall of Fame", icon: "🏆", group: "personal" },
   { to: "/environmental", label: "Environmental", icon: "🌍", group: "personal" },
   { to: "/groups", label: "Groups", icon: "👥", group: "social" },
-  { to: "/settings", label: "Settings", icon: "⚙️", group: "social" },
+  { to: "/settings", label: "Settings", icon: "⚙️", group: "account" },
 ];

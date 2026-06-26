@@ -1,6 +1,7 @@
 import { useStats } from "../data";
 import { GlassCard, StatCard, SectionTitle, LegendDot, COLORS } from "../components/ui";
-import { SpendArea, TokenSplitBar } from "../components/charts";
+import { SpendArea } from "../components/charts";
+import { WhereItWent } from "../components/WhereItWent";
 import { Loading, EmptyState } from "../components/state";
 import { sarcasm, quotes } from "../../shared/sarcasm";
 import { fmtMoney, fmtTokens } from "../../shared/format";
@@ -46,15 +47,7 @@ export function Dashboard() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <GlassCard>
               <SectionTitle title="Where it went" subtitle={sarcasm.cacheQuip(readShare, seed)} />
-              <div className="my-4">
-                <TokenSplitBar t={g} />
-              </div>
-              <div className="space-y-2.5">
-                <LegendDot color={COLORS.cyan} label="Fresh input" value={fmtTokens(g.input)} />
-                <LegendDot color={COLORS.amber} label="Cache writes" value={fmtTokens(g.cacheCreate)} />
-                <LegendDot color={COLORS.lime} label="Cache reads" value={fmtTokens(g.cacheRead)} />
-                <LegendDot color={COLORS.coral} label="Output" value={fmtTokens(g.output)} />
-              </div>
+              <WhereItWent t={g} />
             </GlassCard>
 
             <GlassCard>
