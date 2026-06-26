@@ -6,6 +6,7 @@ import { ingestRoutes } from "./routes/ingest";
 import { statsRoutes } from "./routes/stats";
 import { groupRoutes } from "./routes/groups";
 import { versionRoutes } from "./routes/version";
+import { publicRoutes } from "./routes/public";
 
 const app = new Hono<{ Bindings: Env; Variables: Vars }>();
 
@@ -16,6 +17,7 @@ api.route("/", ingestRoutes); // /pair/claim, /ingest
 api.route("/stats", statsRoutes);
 api.route("/groups", groupRoutes);
 api.route("/version", versionRoutes);
+api.route("/public", publicRoutes);
 api.get("/health", (c) => c.json({ ok: true, worker: c.env.WORKER_VERSION }));
 
 app.route("/api", api);

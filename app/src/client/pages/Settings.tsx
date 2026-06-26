@@ -9,9 +9,67 @@ export function Settings() {
   return (
     <div className="space-y-5">
       <ProfileCard />
+      <ShareCard />
       <DevicesCard />
       <PasskeysCard />
     </div>
+  );
+}
+
+function ShareCard() {
+  const { user, refresh } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const enabled = !!user?.shareToken;
+  const url = user?.shareToken ? `${location.origin}/s/${user.shareToken}` : "";
+
+  async function toggle() {
+    setBusy(true);
+    try {
+      if (enabled) await api.disableShare();
+      else await api.enableShare();
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <GlassCard>
+      <div className="flex items-start justify-between gap-3">
+        <SectionTitle
+          title="Public share page"
+          subtitle="A read-only page anyone with the link can view — your headline stats, no login required."
+        />
+        <Button variant={enabled ? "danger" : "primary"} disabled={busy} onClick={toggle}>
+          {busy ? <Spinner /> : enabled ? "Turn off" : "Turn on"}
+        </Button>
+      </div>
+      {enabled && (
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            readOnly
+            value={url}
+            onFocus={(e) => e.target.select()}
+            className="flex-1 rounded-[10px] border border-white/10 bg-black/30 px-3 py-2 font-mono text-[12px] text-ink outline-none"
+          />
+          <div className="flex gap-2">
+            <Button
+              onClick={async () => {
+                await navigator.clipboard.writeText(url);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              }}
+            >
+              {copied ? "Copied" : "Copy link"}
+            </Button>
+            <a href={url} target="_blank" rel="noreferrer">
+              <Button>Open ↗</Button>
+            </a>
+          </div>
+        </div>
+      )}
+    </GlassCard>
   );
 }
 

@@ -4,6 +4,7 @@ import { StatsProvider } from "./data";
 import { Spinner } from "./components/ui";
 import { Layout } from "./Layout";
 import { LoginPage } from "./pages/Login";
+import { PublicShare } from "./pages/PublicShare";
 import { Dashboard } from "./pages/Dashboard";
 import { OverTime } from "./pages/OverTime";
 import { ByModel } from "./pages/ByModel";
@@ -19,6 +20,16 @@ import { GroupDetailPage } from "./pages/GroupDetail";
 import { Settings } from "./pages/Settings";
 
 export function App() {
+  return (
+    <Routes>
+      {/* Public, unauthenticated share page. */}
+      <Route path="/s/:token" element={<PublicShare />} />
+      <Route path="*" element={<AuthedApp />} />
+    </Routes>
+  );
+}
+
+function AuthedApp() {
   const { user, loading } = useAuth();
 
   if (loading) {

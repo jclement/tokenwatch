@@ -100,3 +100,23 @@ accountRoutes.delete("/devices/:id", requireAuth, async (c) => {
   await db.delete(devices).where(eq(devices.id, id));
   return c.json({ ok: true });
 });
+
+// ---- Public share toggle ----------------------------------------------------
+
+// Enable public sharing → mint (or reuse) a share token.
+accountRoutes.post("/share", requireAuth, async (c) => {
+  const db = getDb(c.env);
+  const userId = c.get("userId");
+  const u = await db.query.users.findFirst({ where: eq(users.id, userId) });
+  if (!u) return c.json({ error: "no account" }, 400);
+  const token = u.shareToken ?? randomId(12);
+  if (!u.shareToken) await db.update(users).set({ shareToken: token }).where(eq(users.id, userId));
+  return c.json({ shareToken: token });
+});
+
+// Disable public sharing.
+accountRoutes.delete("/share", requireAuth, async (c) => {
+  const db = getDb(c.env);
+  await db.update(users).set({ shareToken: null }).where(eq(users.id, c.get("userId")));
+  return c.json({ ok: true });
+});

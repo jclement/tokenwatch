@@ -119,6 +119,22 @@ export interface Me extends PublicUser {
   createdAt: number;
   agentVersion: string | null;
   lastIngestAt: number | null;
+  shareToken: string | null; // public share enabled when non-null
+}
+
+// Curated, read-only stats served on the public /s/<token> page.
+export interface PublicStats {
+  user: PublicUser;
+  grandTotals: TokenTotals;
+  grandCost: number;
+  activeDays: number;
+  messages: number;
+  historyStart: number | null;
+  timeline: DayPoint[];
+  byEngine: BreakdownRow[];
+  byModel: BreakdownRow[];
+  streak: StreakInfo;
+  text: TextTotals;
 }
 
 // ---- Groups -----------------------------------------------------------------

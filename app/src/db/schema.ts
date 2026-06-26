@@ -7,6 +7,7 @@ export const users = sqliteTable("users", {
   username: text("username").notNull().unique(),
   displayName: text("display_name"),
   avatarKey: text("avatar_key"), // R2 object key, or null → generated avatar
+  shareToken: text("share_token").unique(), // public /s/<token> page, null = off
   createdAt: integer("created_at").notNull(),
   // last agent push, for staleness banners
   agentVersion: text("agent_version"),

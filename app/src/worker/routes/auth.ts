@@ -242,6 +242,7 @@ authRoutes.get("/me", async (c) => {
     createdAt: u.createdAt,
     agentVersion: u.agentVersion,
     lastIngestAt: u.lastIngestAt,
+    shareToken: u.shareToken,
   };
   return c.json({ user: me });
 });

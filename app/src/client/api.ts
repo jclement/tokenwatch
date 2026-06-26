@@ -7,6 +7,7 @@ import type {
   Group,
   GroupDetail,
   VersionInfo,
+  PublicStats,
 } from "../shared/types";
 
 export class ApiError extends Error {
@@ -62,6 +63,11 @@ export const api = {
 
   // stats
   stats: () => req<StatsPayload>("/stats"),
+
+  // public sharing
+  enableShare: () => post<{ shareToken: string }>("/share"),
+  disableShare: () => del<{ ok: true }>("/share"),
+  publicStats: (token: string) => req<PublicStats>(`/public/${token}`),
 
   // groups
   groups: () => req<{ groups: Group[] }>("/groups"),
