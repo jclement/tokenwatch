@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # TokenWatch agent installer.
 #   curl -fsSL https://tokens.onewheelgeek.net/install.sh | sh
 #   curl -fsSL https://tokens.onewheelgeek.net/install.sh | sh -s -- --pair ABCD-1234
@@ -6,7 +6,8 @@
 # Downloads the right binary for your OS/arch from the latest GitHub release,
 # installs it to ~/.local/bin (or /usr/local/bin if writable), and — if a
 # pairing code is given — pairs the device and runs an initial sync.
-set -euo pipefail
+# POSIX sh only (Debian/Ubuntu pipe this to dash, which lacks `pipefail`).
+set -eu
 
 REPO="jclement/tokenwatch"
 PAIR_CODE=""
