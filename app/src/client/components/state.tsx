@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { GlassCard, Spinner } from "./ui";
 import { sarcasm } from "../../shared/sarcasm";
 
@@ -16,7 +17,11 @@ export function EmptyState({ seed }: { seed: number }) {
         <div className="text-4xl opacity-40">🌙</div>
         <p className="max-w-sm text-[15px] text-subtle">{sarcasm.emptyState(seed)}</p>
         <p className="text-[12px] text-faint">
-          Pair the TokenWatch agent in <span className="text-mint">Settings</span> to start syncing.
+          Pair the TokenWatch agent in{" "}
+          <Link to="/settings" className="text-mint underline underline-offset-2 hover:text-mint/80">
+            Settings
+          </Link>{" "}
+          to start syncing.
         </p>
       </div>
     </GlassCard>
