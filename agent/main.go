@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -79,10 +80,19 @@ func main() {
 	}
 }
 
-// runUpgrade self-updates the binary in place.
+// runUpgrade self-updates the binary in place — unless it was installed by
+// Homebrew, in which case brew owns the binary and should do the upgrade.
 func runUpgrade(ctx context.Context) {
+	if updater.IsHomebrew() {
+		fmt.Println("Installed via Homebrew — upgrade with:\n  brew upgrade tokenwatch")
+		return
+	}
 	fmt.Println("Checking for a newer release…")
 	tag, err := updater.SelfUpdate(ctx)
+	if errors.Is(err, updater.ErrHomebrew) {
+		fmt.Println("Installed via Homebrew — upgrade with:\n  brew upgrade tokenwatch")
+		return
+	}
 	if err != nil {
 		fail("upgrade: %v", err)
 	}
@@ -182,7 +192,11 @@ func maybeNotifyStale(ctx context.Context) {
 	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if tag := updater.CheckStale(cctx, Version); tag != "" {
-		fmt.Fprintf(os.Stderr, "A newer agent is available (%s, you have %s). Run --upgrade.\n", tag, Version)
+		how := "Run --upgrade."
+		if updater.IsHomebrew() {
+			how = "Run: brew upgrade tokenwatch"
+		}
+		fmt.Fprintf(os.Stderr, "A newer agent is available (%s, you have %s). %s\n", tag, Version, how)
 	}
 }
 

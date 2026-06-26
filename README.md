@@ -29,7 +29,7 @@ app/        Cloudflare Worker + React SPA (Vite, Hono, Drizzle, D1, R2, KV)
   src/db/       Drizzle schema + migrations
   src/shared/   pricing, sarcasm, formatters, types (shared client/worker)
 agent/      Go ingester (stdlib only) — parser, pairing, schedulers, self-update
-scripts/    build-agent.sh (cross-compile)
+agent/.goreleaser.yaml  cross-compile + GitHub release + Homebrew formula push
 .github/    ci.yml (tests), release.yml (binaries + deploy)
 ```
 
@@ -70,8 +70,18 @@ tokenwatch --share-swear-words  include per-word swear tallies (off by default)
 Install on macOS/Linux:
 
 ```sh
+# Homebrew (recommended)
+brew install jclement/tap/tokenwatch
+tokenwatch --pair ABCD-1234
+
+# or curl
 curl -fsSL https://tokens.onewheelgeek.net/install.sh | sh -s -- --pair ABCD-1234
 ```
+
+Homebrew-installed copies upgrade with `brew upgrade tokenwatch`; standalone copies use
+`tokenwatch --upgrade` (the agent detects which and tells you). Release binaries are built and the
+formula is pushed to [jclement/homebrew-tap](https://github.com/jclement/homebrew-tap) by GoReleaser
+([agent/.goreleaser.yaml](agent/.goreleaser.yaml)) on every tag.
 
 ## Deploy (one-time Cloudflare setup)
 

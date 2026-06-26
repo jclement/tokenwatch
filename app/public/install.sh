@@ -32,7 +32,7 @@ case "$OS" in
   *) echo "unsupported OS: $OS (use the Windows installer instead)" >&2; exit 1 ;;
 esac
 
-ASSET="tokenwatch_${OS}_${ARCH}"
+ASSET="tokenwatch_${OS}_${ARCH}.tar.gz"
 URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
 
 # Pick an install dir.
@@ -44,8 +44,11 @@ else
 fi
 
 echo "Downloading TokenWatch agent ($ASSET)…"
-curl -fsSL "$URL" -o "$DEST"
-chmod +x "$DEST"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+curl -fsSL "$URL" -o "$TMP/agent.tar.gz"
+tar -xzf "$TMP/agent.tar.gz" -C "$TMP" tokenwatch
+install -m 0755 "$TMP/tokenwatch" "$DEST" 2>/dev/null || { cp "$TMP/tokenwatch" "$DEST"; chmod +x "$DEST"; }
 echo "✓ installed to $DEST"
 
 case ":$PATH:" in

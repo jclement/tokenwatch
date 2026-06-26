@@ -8,6 +8,7 @@
 [tools]
 node = "22"
 go = "1.26"
+goreleaser = "latest"
 
 [env]
 _.path = ["./app/node_modules/.bin"]
@@ -77,9 +78,14 @@ dir = "agent"
 run = "go vet ./... && go test ./..."
 
 [tasks."agent:build"]
-description = "Cross-compile agent binaries into agent/dist"
+description = "Cross-compile agent archives locally (GoReleaser snapshot) into agent/dist"
 dir = "agent"
-run = "bash ../scripts/build-agent.sh"
+run = "goreleaser build --snapshot --clean"
+
+[tasks."agent:release-check"]
+description = "Validate the GoReleaser config"
+dir = "agent"
+run = "goreleaser check"
 
 # ---- Release ----------------------------------------------------------------
 

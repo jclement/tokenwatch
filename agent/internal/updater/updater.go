@@ -4,8 +4,12 @@
 package updater
 
 import (
+	"archive/tar"
+	"archive/zip"
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +20,11 @@ import (
 	"strings"
 	"time"
 )
+
+// ErrHomebrew is returned by SelfUpdate when the running binary was installed by
+// Homebrew — self-replacing a brew-managed file would desync the Cellar, so the
+// user is told to `brew upgrade tokenwatch` instead.
+var ErrHomebrew = errors.New("installed via Homebrew")
 
 const (
 	// latestURL is the GitHub "latest release" endpoint for the agent repo.
@@ -120,24 +129,51 @@ func parseVersion(s string) []int {
 	return out
 }
 
-// assetName is the release-asset filename we expect for this platform, e.g.
-// "tokenwatch-agent-linux-arm64" (or "...-windows-amd64.exe").
-func assetName() string {
-	name := fmt.Sprintf("tokenwatch-agent-%s-%s", runtime.GOOS, runtime.GOARCH)
+// archiveName is the GoReleaser archive asset for this platform, e.g.
+// "tokenwatch_darwin_arm64.tar.gz" (or "tokenwatch_windows_amd64.zip").
+func archiveName() string {
+	ext := "tar.gz"
 	if runtime.GOOS == "windows" {
-		name += ".exe"
+		ext = "zip"
 	}
-	return name
+	return fmt.Sprintf("tokenwatch_%s_%s.%s", runtime.GOOS, runtime.GOARCH, ext)
 }
 
-// SelfUpdate downloads the latest release binary for this GOOS/GOARCH and
-// atomically swaps it in for the running executable.
+// binaryName is the executable inside the archive.
+func binaryName() string {
+	if runtime.GOOS == "windows" {
+		return "tokenwatch.exe"
+	}
+	return "tokenwatch"
+}
+
+// IsHomebrew reports whether the running binary lives in a Homebrew Cellar
+// (the symlink in <prefix>/bin resolves into .../Cellar/...). brew-managed
+// binaries must be upgraded with `brew upgrade`, not self-replaced.
+func IsHomebrew() bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = real
+	}
+	return strings.Contains(exe, "/Cellar/")
+}
+
+// SelfUpdate downloads the latest release archive for this GOOS/GOARCH, extracts
+// the binary, and atomically swaps it in for the running executable. Returns
+// ErrHomebrew (without touching anything) for brew-managed installs.
 func SelfUpdate(ctx context.Context) (string, error) {
+	if IsHomebrew() {
+		return "", ErrHomebrew
+	}
+
 	rel, err := Latest(ctx)
 	if err != nil {
 		return "", err
 	}
-	want := assetName()
+	want := archiveName()
 	var url string
 	for _, a := range rel.Assets {
 		if a.Name == want {
@@ -157,41 +193,22 @@ func SelfUpdate(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	// Download to a temp file alongside the target so the rename stays on the
-	// same filesystem (cross-device renames fail).
 	dir := filepath.Dir(exe)
-	tmp, err := os.CreateTemp(dir, ".tokenwatch-upgrade-*")
-	if err != nil {
-		return "", err
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath) // no-op once renamed away
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// Download the archive to a temp file (alongside the target so the final
+	// rename stays on one filesystem), then extract the binary out of it.
+	archivePath, err := download(ctx, url, dir)
 	if err != nil {
-		tmp.Close()
 		return "", err
 	}
-	req.Header.Set("User-Agent", userAgent)
-	resp, err := httpClient().Do(req)
+	defer os.Remove(archivePath)
+
+	binTmp, err := extractBinary(archivePath, dir)
 	if err != nil {
-		tmp.Close()
 		return "", err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		tmp.Close()
-		return "", fmt.Errorf("download returned %d", resp.StatusCode)
-	}
-	if _, err := io.Copy(tmp, resp.Body); err != nil {
-		tmp.Close()
-		return "", err
-	}
-	if err := tmp.Close(); err != nil {
-		return "", err
-	}
-	if err := os.Chmod(tmpPath, 0o755); err != nil {
+	defer os.Remove(binTmp) // no-op once renamed away
+	if err := os.Chmod(binTmp, 0o755); err != nil {
 		return "", err
 	}
 
@@ -203,15 +220,128 @@ func SelfUpdate(ctx context.Context) (string, error) {
 		if err := os.Rename(exe, old); err != nil {
 			return "", err
 		}
-		if err := os.Rename(tmpPath, exe); err != nil {
+		if err := os.Rename(binTmp, exe); err != nil {
 			_ = os.Rename(old, exe) // best-effort rollback
 			return "", err
 		}
 		return rel.TagName, nil
 	}
 
-	if err := os.Rename(tmpPath, exe); err != nil {
+	if err := os.Rename(binTmp, exe); err != nil {
 		return "", err
 	}
 	return rel.TagName, nil
+}
+
+// download fetches url into a temp file in dir and returns its path.
+func download(ctx context.Context, url, dir string) (string, error) {
+	tmp, err := os.CreateTemp(dir, ".tokenwatch-archive-*")
+	if err != nil {
+		return "", err
+	}
+	tmpPath := tmp.Name()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return "", err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := httpClient().Do(req)
+	if err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return "", fmt.Errorf("download returned %d", resp.StatusCode)
+	}
+	if _, err := io.Copy(tmp, resp.Body); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return "", err
+	}
+	return tmpPath, nil
+}
+
+// extractBinary pulls the tokenwatch executable out of a .tar.gz (or .zip on
+// Windows) archive into a temp file in dir and returns its path.
+func extractBinary(archivePath, dir string) (string, error) {
+	want := binaryName()
+	if runtime.GOOS == "windows" {
+		return extractFromZip(archivePath, want, dir)
+	}
+
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return "", err
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		if filepath.Base(hdr.Name) == want {
+			return writeToTemp(tr, dir)
+		}
+	}
+	return "", fmt.Errorf("binary %q not found in archive", want)
+}
+
+// extractFromZip is the Windows path (release archives are .zip there).
+func extractFromZip(archivePath, want, dir string) (string, error) {
+	zr, err := zip.OpenReader(archivePath)
+	if err != nil {
+		return "", err
+	}
+	defer zr.Close()
+	for _, zf := range zr.File {
+		if filepath.Base(zf.Name) != want {
+			continue
+		}
+		rc, err := zf.Open()
+		if err != nil {
+			return "", err
+		}
+		defer rc.Close()
+		return writeToTemp(rc, dir)
+	}
+	return "", fmt.Errorf("binary %q not found in archive", want)
+}
+
+// writeToTemp copies r into a fresh temp file in dir and returns its path.
+func writeToTemp(r io.Reader, dir string) (string, error) {
+	out, err := os.CreateTemp(dir, ".tokenwatch-upgrade-*")
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(out, r); err != nil {
+		out.Close()
+		os.Remove(out.Name())
+		return "", err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(out.Name())
+		return "", err
+	}
+	return out.Name(), nil
 }

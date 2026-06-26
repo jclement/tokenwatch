@@ -1,0 +1,63 @@
+version: 2
+project_name: tokenwatch
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - main: .
+    binary: tokenwatch
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w -X main.Version={{.Version}}
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+
+checksum:
+  name_template: "checksums.txt"
+
+brews:
+  - repository:
+      owner: jclement
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TOKEN }}"
+    homepage: "https://tokens.onewheelgeek.net"
+    description: "Sync your Claude Code & Codex token stats to TokenWatch"
+    license: "MIT"
+    install: |
+      bin.install "tokenwatch"
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/tokenwatch --version")
+    caveats: |
+      Pair this device with a code from https://tokens.onewheelgeek.net (Settings):
+        tokenwatch --pair <CODE>
+      Then sync once with `tokenwatch` or continuously with `tokenwatch --continuous`.
+
+changelog:
+  sort: asc
+  filters:
+    exclude: ["^docs:", "^test:", "^ci:", "^chore:"]
+
+release:
+  prerelease: auto
+  footer: |
+    ## Install
+
+    ```bash
+    # macOS/Linux (Homebrew)
+    brew install jclement/tap/tokenwatch
+
+    # or curl
+    curl -fsSL https://tokens.onewheelgeek.net/install.sh | sh -s -- --pair <CODE>
+    ```
