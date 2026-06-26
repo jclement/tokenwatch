@@ -21,8 +21,7 @@
     {
       "binding": "DB",
       "database_name": "tokenwatch",
-      // Replace after `wrangler d1 create tokenwatch`. Local dev ignores this.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "54cb5179-bd04-462f-aaa7-b9bb5d43e297",
       "migrations_dir": "src/db/migrations"
     }
   ],
@@ -35,12 +34,12 @@
   "kv_namespaces": [
     {
       "binding": "KV",
-      // Replace after `wrangler kv namespace create tokenwatch-kv`.
-      "id": "00000000000000000000000000000000"
+      "id": "45f4257b24464db99c488afe498606a3"
     }
   ],
   "env": {
     "production": {
+      // Named environments do NOT inherit top-level bindings — redeclare them.
       "vars": {
         "WORKER_VERSION": "dev",
         "GITHUB_REPO": "jclement/tokenwatch",
@@ -48,6 +47,21 @@
         "RP_NAME": "TokenWatch",
         "ORIGIN": "https://tokens.onewheelgeek.net"
       },
+      "assets": {
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application"
+      },
+      "observability": { "enabled": true },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "tokenwatch",
+          "database_id": "54cb5179-bd04-462f-aaa7-b9bb5d43e297",
+          "migrations_dir": "src/db/migrations"
+        }
+      ],
+      "r2_buckets": [{ "binding": "AVATARS", "bucket_name": "tokenwatch-avatars" }],
+      "kv_namespaces": [{ "binding": "KV", "id": "45f4257b24464db99c488afe498606a3" }],
       "routes": [
         { "pattern": "tokens.onewheelgeek.net", "custom_domain": true }
       ]
