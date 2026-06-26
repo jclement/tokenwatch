@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* TokenWatch palette — ported from the Swift app's Theme.swift.
+   Dark, glassy, faintly neon. Money looks better in the dark. */
+@theme {
+  --color-bg: #0d0f17;
+  --color-bg2: #141721;
+  --color-ink: rgba(255, 255, 255, 0.92);
+  --color-subtle: rgba(255, 255, 255, 0.5);
+  --color-faint: rgba(255, 255, 255, 0.32);
+
+  --color-mint: #66f2bd;
+  --color-cyan: #5cc7fa;
+  --color-amber: #ffbd57;
+  --color-coral: #ff737a;
+  --color-lime: #b8f25c;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "SF Pro Text", "Segoe UI",
+    Roboto, Helvetica, Arial, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 800px at 10% -10%, rgba(92, 199, 250, 0.06), transparent 60%),
+    linear-gradient(135deg, var(--color-bg), var(--color-bg2));
+  background-attachment: fixed;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Frosted card with hairline stroke — the GlassCard equivalent. */
+@utility glass {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  backdrop-filter: blur(8px);
+}
+
+@utility money-gradient {
+  background-image: linear-gradient(90deg, var(--color-mint), var(--color-cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}

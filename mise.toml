@@ -1,0 +1,103 @@
+# TokenWatch task runner.
+#
+#   mise run dev            → worker + client dev server (local D1) at :5173
+#   mise run dev:agent      → run the Go ingester against the dev worker
+#   mise run db:migrate      → apply migrations to local D1
+#   mise run release 1.2.3   → tag v1.2.3 + push (GHA builds binaries + deploys)
+
+[tools]
+node = "22"
+go = "1.26"
+
+[env]
+_.path = ["./app/node_modules/.bin"]
+
+# ---- Web (Cloudflare Worker + React) ----------------------------------------
+
+[tasks."install"]
+description = "Install web dependencies"
+dir = "app"
+run = "npm install"
+
+[tasks.dev]
+description = "Run the dev worker + client (local D1) on :5173"
+dir = "app"
+run = "vite dev --port 5173"
+
+[tasks."db:gen"]
+description = "Generate D1 migrations from the Drizzle schema"
+dir = "app"
+run = "drizzle-kit generate"
+
+[tasks."db:migrate"]
+description = "Apply migrations to the LOCAL D1"
+dir = "app"
+run = "wrangler d1 migrations apply tokenwatch --local"
+
+[tasks."db:migrate:remote"]
+description = "Apply migrations to the REMOTE (production) D1"
+dir = "app"
+run = "wrangler d1 migrations apply tokenwatch --remote"
+
+[tasks.typecheck]
+description = "Typecheck client + worker"
+dir = "app"
+run = "npm run typecheck"
+
+[tasks.lint]
+description = "Lint the web app"
+dir = "app"
+run = "npm run lint"
+
+[tasks.test]
+description = "Run web unit tests"
+dir = "app"
+run = "vitest run"
+
+[tasks.build]
+description = "Build the worker + client bundle"
+dir = "app"
+run = "vite build"
+
+[tasks.deploy]
+description = "Build + deploy the worker to Cloudflare (production)"
+dir = "app"
+run = "vite build && wrangler deploy --env production"
+
+# ---- Go ingestion agent -----------------------------------------------------
+
+[tasks."dev:agent"]
+description = "Run the Go agent once against the local dev worker"
+dir = "agent"
+run = "go run . --url http://localhost:5173 {{arg(name='args', var=true, default='--once')}}"
+
+[tasks."agent:test"]
+description = "Test + vet the Go agent"
+dir = "agent"
+run = "go vet ./... && go test ./..."
+
+[tasks."agent:build"]
+description = "Cross-compile agent binaries into agent/dist"
+dir = "agent"
+run = "bash ../scripts/build-agent.sh"
+
+# ---- Release ----------------------------------------------------------------
+
+[tasks.release]
+description = "Tag a version and push (triggers the GHA release + deploy). Usage: mise run release 1.2.3"
+run = '''
+set -euo pipefail
+VERSION="{{arg(name='version')}}"
+if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+  echo "Version must be semver, e.g. 1.2.3 (got: $VERSION)" >&2
+  exit 1
+fi
+TAG="v$VERSION"
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Working tree is dirty — commit or stash first." >&2
+  exit 1
+fi
+git tag -a "$TAG" -m "TokenWatch $TAG"
+git push origin "$TAG"
+echo "Pushed $TAG — GitHub Actions will build binaries and deploy the worker."
+'''

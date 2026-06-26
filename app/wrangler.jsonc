@@ -1,0 +1,56 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tokenwatch",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "observability": { "enabled": true },
+  "vars": {
+    "WORKER_VERSION": "dev",
+    "GITHUB_REPO": "jclement/tokenwatch",
+    // RP_ID / ORIGIN are overridden per-environment; these are the dev defaults.
+    "RP_ID": "localhost",
+    "RP_NAME": "TokenWatch",
+    "ORIGIN": "http://localhost:5173"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tokenwatch",
+      // Replace after `wrangler d1 create tokenwatch`. Local dev ignores this.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "src/db/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "AVATARS",
+      "bucket_name": "tokenwatch-avatars"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "KV",
+      // Replace after `wrangler kv namespace create tokenwatch-kv`.
+      "id": "00000000000000000000000000000000"
+    }
+  ],
+  "env": {
+    "production": {
+      "vars": {
+        "WORKER_VERSION": "dev",
+        "GITHUB_REPO": "jclement/tokenwatch",
+        "RP_ID": "tokens.onewheelgeek.net",
+        "RP_NAME": "TokenWatch",
+        "ORIGIN": "https://tokens.onewheelgeek.net"
+      },
+      "routes": [
+        { "pattern": "tokens.onewheelgeek.net", "custom_domain": true }
+      ]
+    }
+  }
+}
