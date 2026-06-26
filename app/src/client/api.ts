@@ -63,6 +63,7 @@ export const api = {
 
   // stats
   stats: () => req<StatsPayload>("/stats"),
+  statsCursor: () => req<{ lastIngestAt: number | null }>("/stats/cursor"),
 
   // public sharing
   enableShare: () => post<{ shareToken: string }>("/share"),

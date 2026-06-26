@@ -51,6 +51,15 @@ body {
   color: transparent;
 }
 
+/* Gentle breathing pulse for the live indicator. */
+@keyframes tw-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.8); }
+}
+.animate-tw-pulse {
+  animation: tw-pulse 1.8s ease-in-out infinite;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

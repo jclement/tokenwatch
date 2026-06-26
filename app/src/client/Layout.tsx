@@ -103,9 +103,25 @@ function NavItemLink({
   );
 }
 
+// A small live-status pill: a steadily pulsing dot, flashing "Updated" for a
+// moment whenever the agent pushes new data.
+function LiveDot({ justUpdated }: { justUpdated: boolean }) {
+  return (
+    <span
+      className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors sm:inline-flex ${
+        justUpdated ? "border-mint/40 bg-mint/10 text-mint" : "border-white/10 text-faint"
+      }`}
+      title="Auto-updates as your agent pushes new data"
+    >
+      <span className={`h-1.5 w-1.5 rounded-full bg-mint ${justUpdated ? "" : "animate-tw-pulse"}`} />
+      {justUpdated ? "Updated" : "Live"}
+    </span>
+  );
+}
+
 function Header({ seed, onMenu }: { seed: number; onMenu: () => void }) {
   const { user, logout } = useAuth();
-  const { stats, loading, refresh } = useStats();
+  const { stats, loading, refresh, justUpdated } = useStats();
   const [version, setVersion] = useState<VersionInfo | null>(null);
 
   useEffect(() => {
@@ -153,6 +169,7 @@ function Header({ seed, onMenu }: { seed: number; onMenu: () => void }) {
           <div className="hidden truncate text-[12px] text-subtle sm:block">{statusLine}</div>
         </div>
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          <LiveDot justUpdated={justUpdated} />
           <button
             onClick={() => void refresh()}
             disabled={loading}
