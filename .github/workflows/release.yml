@@ -46,9 +46,11 @@ jobs:
       - run: npm ci
       - name: Apply D1 migrations (production)
         run: npx wrangler d1 migrations apply tokenwatch --remote --env production
-      - name: Build
-        run: npm run build
+      - name: Build (production environment)
+        # The Cloudflare Vite plugin selects the environment at build time via
+        # CLOUDFLARE_ENV — `wrangler deploy --env` is rejected on the redirected config.
+        run: CLOUDFLARE_ENV=production npm run build
       - name: Deploy Worker
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          npx wrangler deploy --env production --var WORKER_VERSION:"$VERSION"
+          npx wrangler deploy --var WORKER_VERSION:"$VERSION"
