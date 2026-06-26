@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type PasskeyInfo, type DeviceInfo } from "../api";
 import { useAuth } from "../auth";
 import { GlassCard, SectionTitle, Button, Spinner } from "../components/ui";
+import { PairingInstructions } from "../components/PairingInstructions";
 import { shortDayTime } from "../../shared/format";
 
 export function Settings() {
@@ -108,10 +109,6 @@ function DevicesCard() {
     await load();
   }
 
-  const installCurl = pairing
-    ? `curl -fsSL ${location.origin}/install.sh | sh -s -- --pair ${pairing.code}`
-    : "";
-
   return (
     <GlassCard>
       <SectionTitle title="Ingestion devices" subtitle="The TokenWatch agent reads your local logs and pushes sanitized stats. Raw logs never leave your machine." />
@@ -122,27 +119,7 @@ function DevicesCard() {
         </Button>
       </div>
 
-      {pairing && (
-        <div className="mt-4 space-y-3 rounded-xl bg-white/[0.03] p-4">
-          <div>
-            <div className="text-[12px] text-subtle">Pairing code (valid ~10 min)</div>
-            <div className="mt-1 font-mono text-2xl tracking-widest text-mint">{pairing.code}</div>
-          </div>
-          <div>
-            <div className="text-[12px] text-subtle">Quick install (macOS / Linux)</div>
-            <code className="mt-1 block overflow-x-auto whitespace-pre rounded-lg bg-black/40 p-3 font-mono text-[12px] text-ink">
-              {installCurl}
-            </code>
-          </div>
-          <div className="text-[12px] text-subtle">
-            Or download the binary from{" "}
-            <a className="text-cyan underline" href="https://github.com/jclement/tokenwatch/releases/latest" target="_blank" rel="noreferrer">
-              Releases
-            </a>{" "}
-            and run <code className="font-mono text-mint">tokenwatch --pair {pairing.code}</code>.
-          </div>
-        </div>
-      )}
+      {pairing && <PairingInstructions code={pairing.code} />}
 
       <div className="mt-4 space-y-2">
         {devices === null ? (
