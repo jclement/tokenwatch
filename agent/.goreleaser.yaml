@@ -32,6 +32,9 @@ brews:
       owner: jclement
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TOKEN }}"
+    # Homebrew 4.x+ only discovers formulae in the Formula/ subdirectory; a
+    # root-level .rb is silently ignored. (Default was root in older GoReleaser.)
+    directory: Formula
     homepage: "https://tokens.onewheelgeek.net"
     description: "Sync your Claude Code & Codex token stats to TokenWatch"
     license: "MIT"
