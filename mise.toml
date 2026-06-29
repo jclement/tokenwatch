@@ -63,7 +63,14 @@ run = "vite build"
 [tasks.deploy]
 description = "Build + deploy the worker to Cloudflare (production)"
 dir = "app"
-run = "vite build && wrangler deploy --env production"
+# The Cloudflare Vite plugin selects the environment at BUILD time via
+# CLOUDFLARE_ENV. `wrangler deploy --env` is rejected on the redirected config
+# it emits, so never pass --env here.
+run = """
+CLOUDFLARE_ENV=production vite build
+V="$(git describe --tags --always 2>/dev/null | sed 's/^v//')"
+wrangler deploy --var WORKER_VERSION:"${V:-dev}"
+"""
 
 # ---- Go ingestion agent -----------------------------------------------------
 
