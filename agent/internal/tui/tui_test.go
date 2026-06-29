@@ -3,13 +3,18 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jclement/tokenwatch/agent/internal/config"
 )
 
+func keyMsg(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
+
 // sampleModel builds a model at a given size with some data and returns it.
 func sampleModel(w, h int) model {
-	m := newModel(&config.Config{ServerURL: "https://tokens.onewheelgeek.net", DeviceToken: "dev.tok"}, "1.2.3")
+	m := newModel(&config.Config{ServerURL: "https://tokens.onewheelgeek.net", DeviceToken: "dev.tok"}, "1.2.3", 5*time.Minute)
+	m.scanning = false // initial scan considered done for rendering tests
 	m.w, m.h = w, h
 	mm, _ := m.Update(scanMsg{
 		agg: map[string]*modelStat{
@@ -36,10 +41,34 @@ func TestViewRendersWithoutPanic(t *testing.T) {
 }
 
 func TestEmptyHistograph(t *testing.T) {
-	m := newModel(&config.Config{ServerURL: "https://x"}, "dev")
+	m := newModel(&config.Config{ServerURL: "https://x"}, "dev", time.Minute)
+	m.scanning = false
 	m.w, m.h = 90, 30
 	if out := m.View(); !strings.Contains(stripANSI(out), "no token usage") {
 		t.Fatal("expected empty-state hint in histograph")
+	}
+}
+
+func TestAutoSyncScheduling(t *testing.T) {
+	m := newModel(&config.Config{ServerURL: "https://x", DeviceToken: "tok"}, "dev", 5*time.Minute)
+	m.scanning = false
+	m.now = time.Now()
+
+	if !m.dueForSync() {
+		t.Fatal("should sync immediately on launch (zero lastSync)")
+	}
+	m.lastSync = m.now
+	if m.dueForSync() {
+		t.Fatal("should not sync again right after a sync")
+	}
+	m.now = m.lastSync.Add(6 * time.Minute)
+	if !m.dueForSync() {
+		t.Fatal("should sync once the interval has elapsed")
+	}
+	// toggling auto off via the 'a' key
+	mm, _ := m.Update(keyMsg("a"))
+	if mm.(model).autoOn {
+		t.Fatal("'a' should toggle auto-sync off")
 	}
 }
 

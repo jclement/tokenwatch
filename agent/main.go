@@ -63,7 +63,7 @@ func main() {
 
 	switch {
 	case *tuiMode:
-		if err := tui.Run(cfg, Version); err != nil {
+		if err := tui.Run(cfg, Version, *interval); err != nil {
 			fail("tui: %v", err)
 		}
 	case *upgrade:

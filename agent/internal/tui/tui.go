@@ -21,9 +21,10 @@ import (
 	"github.com/jclement/tokenwatch/agent/internal/ui"
 )
 
-// Run launches the TUI and blocks until the user quits.
-func Run(cfg *config.Config, version string) error {
-	p := tea.NewProgram(newModel(cfg, version), tea.WithAltScreen())
+// Run launches the TUI and blocks until the user quits. `every` is the
+// auto-sync interval (continuous mode, on by default).
+func Run(cfg *config.Config, version string, every time.Duration) error {
+	p := tea.NewProgram(newModel(cfg, version, every), tea.WithAltScreen())
 	_, err := p.Run()
 	return err
 }
@@ -51,6 +52,11 @@ type model struct {
 
 	scanning bool
 
+	// continuous auto-sync
+	autoEvery time.Duration
+	autoOn    bool
+	lastSync  time.Time // last auto-sync attempt (success or not), for scheduling
+
 	lastPushAt time.Time
 	lastRecv   int
 	lastIns    int
@@ -68,13 +74,19 @@ type model struct {
 
 const dissolveFrames = 16
 
-func newModel(cfg *config.Config, version string) model {
+func newModel(cfg *config.Config, version string, every time.Duration) model {
+	if every <= 0 {
+		every = 5 * time.Minute
+	}
 	return model{
-		cfg:     cfg,
-		version: version,
-		agg:     map[string]*modelStat{},
-		now:     time.Now(),
-		rng:     rand.New(rand.NewSource(time.Now().UnixNano())),
+		cfg:       cfg,
+		version:   version,
+		agg:       map[string]*modelStat{},
+		now:       time.Now(),
+		scanning:  true, // initial scan in flight
+		autoEvery: every,
+		autoOn:    true,
+		rng:       rand.New(rand.NewSource(time.Now().UnixNano())),
 		logs: []logLine{
 			{time.Now(), "info", "Scanning local Claude Code & Codex logs…"},
 		},
@@ -209,6 +221,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "p":
 			if !m.scanning {
 				m.scanning = true
+				m.lastSync = time.Now() // reset the auto-sync clock
 				m.log("info", "Pushing new events…")
 				return m, doPush(m.cfg, m.version)
 			}
@@ -218,12 +231,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.log("info", "Rescanning local logs…")
 				return m, func() tea.Msg { return initialScan() }
 			}
+		case "a":
+			m.autoOn = !m.autoOn
+			if m.autoOn {
+				m.log("info", fmt.Sprintf("Auto-sync on (every %s).", shortDur(m.autoEvery)))
+			} else {
+				m.log("info", "Auto-sync paused.")
+			}
 		}
 		return m, nil
 
 	case tickMsg:
 		m.now = time.Time(msg)
 		m.spin++
+		// Continuous mode: fire an auto-sync when due.
+		if m.autoOn && !m.scanning && m.cfg.DeviceToken != "" && m.dueForSync() {
+			m.scanning = true
+			m.lastSync = m.now
+			m.log("info", "Auto-sync…")
+			return m, tea.Batch(tick(), doPush(m.cfg, m.version))
+		}
 		return m, tick()
 
 	case scanMsg:
@@ -270,6 +297,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, dissolveTick()
 	}
 	return m, nil
+}
+
+// dueForSync reports whether an auto-sync should fire now.
+func (m model) dueForSync() bool {
+	if m.lastSync.IsZero() {
+		return true // sync immediately on launch, like --continuous
+	}
+	return m.now.Sub(m.lastSync) >= m.autoEvery
+}
+
+// shortDur renders a duration compactly: "5m", "90s", "2m30s".
+func shortDur(d time.Duration) string {
+	d = d.Round(time.Second)
+	if d >= time.Minute && d%time.Minute == 0 {
+		return fmt.Sprintf("%dm", int(d/time.Minute))
+	}
+	return d.String()
 }
 
 func (m model) startDissolve() (tea.Model, tea.Cmd) {
@@ -354,7 +398,7 @@ func (m model) renderMain() string {
 
 	title := m.renderTitle(w)
 	status := m.renderStatus(w)
-	help := ui.DimStyle.Render("  q quit · p push now · r rescan")
+	help := ui.DimStyle.Render("  q quit · p push now · a auto-sync · r rescan")
 
 	// fixed-height pieces
 	used := lipgloss.Height(title) + lipgloss.Height(status) + lipgloss.Height(help)
@@ -497,9 +541,26 @@ func (m model) renderStatus(w int) string {
 	}
 	sess := fmt.Sprintf("↑%d ev · %s tok", m.sessEvents, fmtTokens(m.sessTokens))
 
+	auto := ui.DimStyle.Render("auto off")
+	if m.autoOn {
+		label := "⟳ auto " + shortDur(m.autoEvery)
+		if m.cfg.DeviceToken != "" {
+			rem := m.autoEvery
+			if !m.lastSync.IsZero() {
+				rem = m.autoEvery - m.now.Sub(m.lastSync)
+			}
+			if rem < 0 {
+				rem = 0
+			}
+			label += fmt.Sprintf(" (next %d:%02d)", int(rem/time.Minute), int(rem%time.Minute/time.Second))
+		}
+		auto = ui.SuccessStyle.Render(label)
+	}
+
 	segs := []string{
 		ui.AccentStyle.Render(host),
 		paired,
+		auto,
 		last,
 		ui.BoldStyle.Render(sess),
 		ui.DimStyle.Render("v" + m.version),
