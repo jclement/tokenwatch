@@ -17,6 +17,8 @@ import (
 	"github.com/jclement/tokenwatch/agent/internal/client"
 	"github.com/jclement/tokenwatch/agent/internal/config"
 	"github.com/jclement/tokenwatch/agent/internal/parser"
+	"github.com/jclement/tokenwatch/agent/internal/tui"
+	"github.com/jclement/tokenwatch/agent/internal/ui"
 	"github.com/jclement/tokenwatch/agent/internal/updater"
 )
 
@@ -36,7 +38,9 @@ func main() {
 		shareSwearWords = flag.Bool("share-swear-words", false, "include per-word swear tallies in uploads")
 		showVersion     = flag.Bool("version", false, "print version and exit")
 		name            = flag.String("name", "", "device name for pairing (default: hostname)")
+		tuiMode         = flag.Bool("tui", false, "launch the interactive dashboard (histograph + live log)")
 	)
+	flag.Usage = usage
 	flag.Parse()
 
 	if *showVersion {
@@ -58,6 +62,10 @@ func main() {
 	ctx := context.Background()
 
 	switch {
+	case *tuiMode:
+		if err := tui.Run(cfg, Version); err != nil {
+			fail("tui: %v", err)
+		}
 	case *upgrade:
 		runUpgrade(ctx)
 	case *pair != "":
@@ -104,7 +112,7 @@ func runUpgrade(ctx context.Context) {
 	if err != nil {
 		fail("upgrade: %v", err)
 	}
-	fmt.Printf("Upgraded to %s. Re-run the agent to use it.\n", tag)
+	ui.Success("Upgraded to %s. Re-run the agent to use it.", ui.Bold(tag))
 }
 
 // runPair trades a pairing code for a device token and stores it.
@@ -125,14 +133,14 @@ func runPair(ctx context.Context, cfg *config.Config, code, name string) {
 	if err := cfg.Save(); err != nil {
 		fail("saving device token: %v", err)
 	}
-	fmt.Printf("Paired as %q. Device token saved.\n", name)
+	ui.Success("Paired as %s. Device token saved.", ui.Bold(name))
 }
 
 // runContinuous loops, scanning and pushing on each tick. The first scan runs
 // immediately so the agent does useful work without waiting a full interval.
 func runContinuous(ctx context.Context, cfg *config.Config, interval time.Duration, shareSwearWords bool) {
 	maybeNotifyStale(ctx)
-	fmt.Printf("Running continuously (every %s). Ctrl-C to stop.\n", interval)
+	ui.Info("Running continuously (every %s). Ctrl-C to stop. Tip: try %s for a live view.", interval, ui.Accent("--tui"))
 	for {
 		if err := scanAndPush(ctx, cfg, shareSwearWords); err != nil {
 			fmt.Fprintf(os.Stderr, "scan: %v\n", err)
@@ -171,7 +179,7 @@ func scanAndPush(ctx context.Context, cfg *config.Config, shareSwearWords bool) 
 	}
 
 	if len(events) == 0 {
-		fmt.Printf("Nothing new (%d files, all unchanged).\n", len(files))
+		ui.Info("Nothing new (%d files, all unchanged).", len(files))
 		return nil
 	}
 
@@ -189,8 +197,9 @@ func scanAndPush(ctx context.Context, cfg *config.Config, shareSwearWords bool) 
 		return fmt.Errorf("saving fingerprints: %w", err)
 	}
 
-	fmt.Printf("Pushed %d events from %d file(s): received=%d inserted=%d.\n",
-		len(events), scanned, resp.Received, resp.Inserted)
+	ui.Success("Pushed %s events from %d file(s) · received %d, inserted %s",
+		ui.Bold(fmt.Sprintf("%d", len(events))), scanned, resp.Received,
+		ui.Mintf(fmt.Sprintf("%d", resp.Inserted)))
 	return nil
 }
 
@@ -204,11 +213,47 @@ func maybeNotifyStale(ctx context.Context) {
 		if updater.IsHomebrew() {
 			how = "Run: brew upgrade tokenwatch"
 		}
-		fmt.Fprintf(os.Stderr, "A newer agent is available (%s, you have %s). %s\n", tag, Version, how)
+		ui.Warn("A newer agent is available (%s, you have %s). %s", tag, Version, how)
 	}
 }
 
 func fail(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, "error: "+format+"\n", args...)
+	ui.Error(format, args...)
 	os.Exit(1)
+}
+
+// usage is a styled, double-dash help screen (replaces flag's single-dash default).
+func usage() {
+	p := func(s string) { fmt.Fprintln(os.Stdout, s) }
+	row := func(flag, desc string) {
+		fmt.Fprintf(os.Stdout, "  %s  %s\n", ui.Accent(fmt.Sprintf("%-22s", flag)), ui.Dim(desc))
+	}
+	p("")
+	p("  " + ui.Logo() + ui.Dim("  agent · v"+Version))
+	p(ui.Dim("  Reads your local Claude Code & Codex logs and pushes sanitized stats."))
+	p("")
+	p(ui.Bold("Usage"))
+	p("  tokenwatch [flags]")
+	p("")
+	p(ui.Bold("Commands"))
+	row("--pair <CODE>", "pair this device with a code from the web, then exit")
+	row("--tui", "launch the interactive dashboard (histograph + live log)")
+	row("--install", "run automatically in the background (OS scheduler)")
+	row("--uninstall", "remove the background service")
+	row("--upgrade", "update to the latest release")
+	row("--version", "print version and exit")
+	p("")
+	p(ui.Bold("Options"))
+	row("--once", "scan once and exit (default)")
+	row("--continuous", "loop, pushing only new/changed files")
+	row("--interval <dur>", "poll interval for --continuous (default 5m)")
+	row("--url <URL>", "override server base URL")
+	row("--name <NAME>", "device name for pairing (default: hostname)")
+	row("--share-swear-words", "include per-word swear tallies in uploads")
+	p("")
+	p(ui.Bold("Examples"))
+	p(ui.Dim("  tokenwatch --pair ABCD-1234"))
+	p(ui.Dim("  tokenwatch --tui"))
+	p(ui.Dim("  tokenwatch --continuous --interval 2m"))
+	p("")
 }

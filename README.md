@@ -59,6 +59,7 @@ Other tasks: `mise run typecheck`, `mise run lint`, `mise run test`, `mise run a
 ```
 tokenwatch --pair <CODE>      pair this device (from the web Settings page)
 tokenwatch                    one-shot sync (default)
+tokenwatch --tui              interactive dashboard: token histograph + live log
 tokenwatch --continuous       loop, debounced by file fingerprints
 tokenwatch --install          register an OS scheduler entry (launchd/systemd/schtasks)
 tokenwatch --uninstall        remove it
