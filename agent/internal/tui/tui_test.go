@@ -76,17 +76,36 @@ func TestPushFoldsIntoHistograph(t *testing.T) {
 	m := sampleModel(100, 30)
 	before := m.agg["gpt-5"].tokens
 	mm, _ := m.Update(pushMsg{
-		recv: 3, ins: 3, events: 3, tokens: 700_000,
-		byModel: map[string]int{"gpt-5": 700_000},
-		engines: map[string]string{"gpt-5": "Codex"},
-		files:   12,
+		recv: 1, ins: 1, events: 1,
+		usage: []usageContrib{{id: "new-1", model: "gpt-5", engine: "Codex", tokens: 700_000}},
+		files: 12,
 	})
 	m2 := mm.(model)
 	if got := m2.agg["gpt-5"].tokens; got != before+700_000 {
 		t.Fatalf("push not folded: got %d want %d", got, before+700_000)
 	}
-	if m2.sessEvents != 3 || m2.sessTokens != 700_000 {
+	if m2.sessEvents != 1 || m2.sessTokens != 700_000 {
 		t.Fatalf("session counters wrong: %d events, %d tokens", m2.sessEvents, m2.sessTokens)
+	}
+}
+
+// The histograph must count each event id once, even if it recurs across
+// resumed/branched session files (the bug that inflated totals to billions).
+func TestDedupAcrossDuplicateIds(t *testing.T) {
+	m := sampleModel(100, 30)
+	before := m.agg["gpt-5"].tokens
+	dup := []usageContrib{
+		{id: "dup-x", model: "gpt-5", engine: "Codex", tokens: 500_000},
+		{id: "dup-x", model: "gpt-5", engine: "Codex", tokens: 500_000}, // same id again
+		{id: "dup-x", model: "gpt-5", engine: "Codex", tokens: 500_000}, // and again
+	}
+	mm, _ := m.Update(pushMsg{recv: 3, ins: 1, events: 3, usage: dup, files: 1})
+	m2 := mm.(model)
+	if got := m2.agg["gpt-5"].tokens; got != before+500_000 {
+		t.Fatalf("duplicate ids double-counted: got %d want %d (+500k once)", got, before+500_000)
+	}
+	if m2.sessTokens != 500_000 {
+		t.Fatalf("session tokens double-counted: %d", m2.sessTokens)
 	}
 }
 

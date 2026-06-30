@@ -46,6 +46,7 @@ type model struct {
 	w, h    int
 
 	agg  map[string]*modelStat
+	seen map[string]struct{} // event ids already counted — dedups resumed/branched sessions
 	logs []logLine
 	spin int
 	now  time.Time
@@ -82,6 +83,7 @@ func newModel(cfg *config.Config, version string, every time.Duration) model {
 		cfg:       cfg,
 		version:   version,
 		agg:       map[string]*modelStat{},
+		seen:      map[string]struct{}{},
 		now:       time.Now(),
 		scanning:  true, // initial scan in flight
 		autoEvery: every,
@@ -99,14 +101,21 @@ type tickMsg time.Time
 type dissolveMsg struct{}
 type scanMsg struct {
 	agg   map[string]*modelStat
+	seen  map[string]struct{}
 	files int
 }
+
+// usageContrib is one usage event's contribution to the histograph, kept with
+// its id so the model can dedup it against everything already counted.
+type usageContrib struct {
+	id, model, engine string
+	tokens            int
+}
 type pushMsg struct {
-	recv, ins, events, tokens int
-	byModel                   map[string]int
-	engines                   map[string]string
-	files                     int
-	err                       error
+	recv, ins, events int
+	usage             []usageContrib
+	files             int
+	err               error
 }
 
 func tick() tea.Cmd {
@@ -118,10 +127,13 @@ func dissolveTick() tea.Cmd {
 }
 
 // initialScan parses everything (ignoring fingerprints) to populate the
-// histograph with a full local picture.
+// histograph with a full local picture. It dedups by event id — Claude Code
+// copies earlier messages into new files on resume/branch, so the same id
+// recurs across files and must be counted once (exactly what the server does).
 func initialScan() tea.Msg {
 	p := parser.New()
 	agg := map[string]*modelStat{}
+	seen := map[string]struct{}{}
 	files := p.Enumerate()
 	for _, ref := range files {
 		for _, e := range p.ParseFile(ref, false) {
@@ -129,6 +141,10 @@ func initialScan() tea.Msg {
 			if e.Model == "" || tok == 0 {
 				continue
 			}
+			if _, dup := seen[e.ID]; dup {
+				continue
+			}
+			seen[e.ID] = struct{}{}
 			s := agg[e.Model]
 			if s == nil {
 				s = &modelStat{engine: string(e.Engine)}
@@ -137,7 +153,7 @@ func initialScan() tea.Msg {
 			s.tokens += tok
 		}
 	}
-	return scanMsg{agg: agg, files: len(files)}
+	return scanMsg{agg: agg, seen: seen, files: len(files)}
 }
 
 // doPush scans changed files and uploads them (the real sync).
@@ -161,17 +177,13 @@ func doPush(cfg *config.Config, version string) tea.Cmd {
 			events = append(events, p.ParseFile(ref, false)...)
 			pending[ref.Path] = fp
 		}
-		byModel := map[string]int{}
-		engines := map[string]string{}
-		tokens := 0
+		var usage []usageContrib
 		for _, e := range events {
 			tok := e.Input + e.CacheRead + e.CacheCreate + e.Output
 			if e.Model == "" || tok == 0 {
 				continue
 			}
-			byModel[e.Model] += tok
-			engines[e.Model] = string(e.Engine)
-			tokens += tok
+			usage = append(usage, usageContrib{id: e.ID, model: e.Model, engine: string(e.Engine), tokens: tok})
 		}
 		if len(events) == 0 {
 			return pushMsg{files: len(files)}
@@ -187,7 +199,7 @@ func doPush(cfg *config.Config, version string) tea.Cmd {
 		_ = cfg.Save()
 		return pushMsg{
 			recv: resp.Received, ins: resp.Inserted, events: len(events),
-			tokens: tokens, byModel: byModel, engines: engines, files: len(files),
+			usage: usage, files: len(files),
 		}
 	}
 }
@@ -255,6 +267,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case scanMsg:
 		m.agg = msg.agg
+		m.seen = msg.seen
+		if m.seen == nil {
+			m.seen = map[string]struct{}{}
+		}
 		m.files = msg.files
 		m.scanning = false
 		m.log("ok", fmt.Sprintf("Scanned %d log files · %d models, %s tokens local",
@@ -275,18 +291,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastPushAt = time.Now()
 		m.lastRecv = msg.recv
 		m.lastIns = msg.ins
-		m.sessEvents += msg.events
-		m.sessTokens += msg.tokens
-		for mdl, tok := range msg.byModel {
-			s := m.agg[mdl]
-			if s == nil {
-				s = &modelStat{engine: msg.engines[mdl]}
-				m.agg[mdl] = s
+		// Fold only genuinely-new ids into the histograph (dedup as the server does).
+		newTokens, newEvents := 0, 0
+		for _, u := range msg.usage {
+			if _, dup := m.seen[u.id]; dup {
+				continue
 			}
-			s.tokens += tok
+			m.seen[u.id] = struct{}{}
+			s := m.agg[u.model]
+			if s == nil {
+				s = &modelStat{engine: u.engine}
+				m.agg[u.model] = s
+			}
+			s.tokens += u.tokens
+			newTokens += u.tokens
+			newEvents++
 		}
-		m.log("ok", fmt.Sprintf("Pushed %d events · received %d, inserted %d · %s tokens",
-			msg.events, msg.recv, msg.ins, fmtTokens(msg.tokens)))
+		m.sessEvents += newEvents
+		m.sessTokens += newTokens
+		m.log("ok", fmt.Sprintf("Pushed %d events · received %d, inserted %d · %s new tokens",
+			msg.events, msg.recv, msg.ins, fmtTokens(newTokens)))
 		return m, nil
 
 	case dissolveMsg:
