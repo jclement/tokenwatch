@@ -14,6 +14,7 @@ func TestLoadDropsFingerprintsFromOlderParser(t *testing.T) {
 		version int
 		keep    bool
 	}{
+		{"pre-versioning agent", 0, false},
 		{"older parser", ParseVersion - 1, false},
 		{"current parser", ParseVersion, true},
 	} {
@@ -30,6 +31,12 @@ func TestLoadDropsFingerprintsFromOlderParser(t *testing.T) {
 				FileFingerprints: map[string]Fingerprint{filepath.Join(dir, "a.jsonl"): {ModMs: 1, Size: 2}}}
 			if err := c.Save(); err != nil {
 				t.Fatal(err)
+			}
+			if tc.version == 0 { // an older agent's config has no parseVersion key at all
+				raw := `{"serverURL":"x","fileFingerprints":{"` + filepath.Join(dir, "a.jsonl") + `":{"modMs":1,"size":2}}}`
+				if err := os.WriteFile(p, []byte(raw), 0o600); err != nil {
+					t.Fatal(err)
+				}
 			}
 			got, err := Load()
 			if err != nil {

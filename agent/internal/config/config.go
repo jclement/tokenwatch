@@ -27,7 +27,8 @@ type Fingerprint struct {
 // server merges the re-sent events into the ones it already holds.
 //
 //	2: 1-hour cache writes, merged Claude message lines, Codex repeat skipping
-const ParseVersion = 2
+//	3: same as 2; 0.3.0 never triggered its re-read (see Load)
+const ParseVersion = 3
 
 // Config is the whole on-disk state, stored as one JSON file.
 type Config struct {
@@ -66,14 +67,16 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// ParseVersion starts at zero so that a file without the field (written
+	// by an older agent) reads as outdated.
 	c := &Config{
 		ServerURL:        DefaultServerURL,
 		FileFingerprints: map[string]Fingerprint{},
-		ParseVersion:     ParseVersion,
 		path:             path,
 	}
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
+		c.ParseVersion = ParseVersion
 		return c, nil
 	}
 	if err != nil {
