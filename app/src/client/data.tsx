@@ -24,19 +24,25 @@ export function StatsProvider({ children }: { children: React.ReactNode }) {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [justUpdated, setJustUpdated] = useState(false);
   const cursorRef = useRef<number | null>(null);
+  const requestRef = useRef(0); // only the newest request may commit its result
 
+  // `reseed` marks a user-initiated load: it shows the loading state and
+  // re-rolls the sarcasm. Live auto-updates pass false and refresh silently.
   const refresh = useCallback(async (reseed = true) => {
-    setLoading(true);
-    setError(null);
+    const req = ++requestRef.current;
+    if (reseed) setLoading(true);
     try {
       const s = await api.stats();
+      if (req !== requestRef.current) return;
       setStats(s);
+      setError(null);
       if (reseed) setSeed(Math.floor(Math.random() * 100000));
       setLastUpdated(Date.now());
     } catch (e) {
+      if (req !== requestRef.current) return;
       setError((e as Error).message);
     } finally {
-      setLoading(false);
+      if (req === requestRef.current) setLoading(false);
     }
   }, []);
 
@@ -61,7 +67,11 @@ export function StatsProvider({ children }: { children: React.ReactNode }) {
       if (document.hidden) return;
       try {
         const { lastIngestAt } = await api.statsCursor();
-        if (lastIngestAt !== null && lastIngestAt !== cursorRef.current) {
+        // A null baseline (its first fetch failed) is just adopted, not
+        // treated as new data — the initial load already fetched stats.
+        if (cursorRef.current === null) {
+          cursorRef.current = lastIngestAt;
+        } else if (lastIngestAt !== null && lastIngestAt !== cursorRef.current) {
           cursorRef.current = lastIngestAt;
           await refresh(false); // new data — refetch without re-rolling sarcasm
           setJustUpdated(true);

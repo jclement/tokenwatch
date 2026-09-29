@@ -21,11 +21,20 @@ type Fingerprint struct {
 	Size  int64 `json:"size"`
 }
 
+// ParseVersion is bumped whenever the parser starts extracting something new
+// from logs it has already uploaded. A config saved by an older parser has its
+// fingerprints dropped on load, so every file is re-read and re-sent once; the
+// server merges the re-sent events into the ones it already holds.
+//
+//	2: 1-hour cache writes, merged Claude message lines, Codex repeat skipping
+const ParseVersion = 2
+
 // Config is the whole on-disk state, stored as one JSON file.
 type Config struct {
 	ServerURL        string                 `json:"serverURL"`
 	DeviceToken      string                 `json:"deviceToken"`
 	FileFingerprints map[string]Fingerprint `json:"fileFingerprints"`
+	ParseVersion     int                    `json:"parseVersion"`
 
 	// path is where this config was loaded from / will be saved to. Not serialized.
 	path string `json:"-"`
@@ -60,6 +69,7 @@ func Load() (*Config, error) {
 	c := &Config{
 		ServerURL:        DefaultServerURL,
 		FileFingerprints: map[string]Fingerprint{},
+		ParseVersion:     ParseVersion,
 		path:             path,
 	}
 	data, err := os.ReadFile(path)
@@ -76,8 +86,9 @@ func Load() (*Config, error) {
 	if c.ServerURL == "" {
 		c.ServerURL = DefaultServerURL
 	}
-	if c.FileFingerprints == nil {
+	if c.FileFingerprints == nil || c.ParseVersion < ParseVersion {
 		c.FileFingerprints = map[string]Fingerprint{}
+		c.ParseVersion = ParseVersion
 	}
 	return c, nil
 }

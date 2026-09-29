@@ -20,6 +20,7 @@ import type {
   StreakInfo,
   TextTotals,
 } from "../../shared/types";
+import { DAY, earliestTodayKey } from "./days";
 
 // Curate a full StatsPayload down to the read-only PublicStats shown on the
 // public /s/<token> page and on group member-detail pages.
@@ -39,7 +40,6 @@ export function toPublicStats(user: PublicUser, stats: StatsPayload): PublicStat
   };
 }
 
-const DAY = 86_400;
 
 interface DemRow {
   day: number;
@@ -48,6 +48,7 @@ interface DemRow {
   input: number;
   cache_read: number;
   cache_create: number;
+  cache_create_1h: number;
   output: number;
 }
 
@@ -55,11 +56,13 @@ const totalsOf = (r: {
   input: number;
   cache_read: number;
   cache_create: number;
+  cache_create_1h: number;
   output: number;
 }): TokenTotals => ({
   input: r.input,
   cacheRead: r.cache_read,
   cacheCreate: r.cache_create,
+  cacheCreate1h: r.cache_create_1h,
   output: r.output,
 });
 
@@ -69,7 +72,7 @@ async function demRows(db: D1Database, userId: string): Promise<DemRow[]> {
     .prepare(
       `SELECT day, engine, model,
               SUM(input) AS input, SUM(cache_read) AS cache_read,
-              SUM(cache_create) AS cache_create, SUM(output) AS output
+              SUM(cache_create) AS cache_create, SUM(cache_create_1h) AS cache_create_1h, SUM(output) AS output
        FROM events WHERE user_id = ? GROUP BY day, engine, model`,
     )
     .bind(userId)
@@ -114,7 +117,7 @@ async function buildHourly(db: D1Database, userId: string): Promise<HourBucket[]
     .prepare(
       `SELECT hour, engine, model,
               SUM(input) AS input, SUM(cache_read) AS cache_read,
-              SUM(cache_create) AS cache_create, SUM(output) AS output
+              SUM(cache_create) AS cache_create, SUM(cache_create_1h) AS cache_create_1h, SUM(output) AS output
        FROM events WHERE user_id = ? AND hour BETWEEN 0 AND 23
        GROUP BY hour, engine, model`,
     )
@@ -142,7 +145,7 @@ async function buildSessions(db: D1Database, userId: string, limit = 15): Promis
     .prepare(
       `SELECT session, engine, model, MIN(ts) AS start, MAX(ts) AS end, COUNT(*) AS msgs,
               SUM(input) AS input, SUM(cache_read) AS cache_read,
-              SUM(cache_create) AS cache_create, SUM(output) AS output
+              SUM(cache_create) AS cache_create, SUM(cache_create_1h) AS cache_create_1h, SUM(output) AS output
        FROM events WHERE user_id = ? AND session != '' AND ts > 0
        GROUP BY session, engine, model`,
     )
@@ -152,6 +155,7 @@ async function buildSessions(db: D1Database, userId: string, limit = 15): Promis
   interface Acc {
     engine: Engine;
     model: string;
+    modelTokens: number; // tokens of the model currently labelling the session
     t: TokenTotals;
     cost: number;
     start: number;
@@ -164,13 +168,16 @@ async function buildSessions(db: D1Database, userId: string, limit = 15): Promis
     const t = totalsOf(r);
     const a =
       bySession.get(r.session) ??
-      ({ engine, model: r.model, t: emptyTotals(), cost: 0, start: r.start, end: r.end, msgs: 0 } as Acc);
+      ({ engine, model: r.model, modelTokens: 0, t: emptyTotals(), cost: 0, start: r.start, end: r.end, msgs: 0 } as Acc);
     a.t = addTotals(a.t, t);
     a.cost += costOf(t, r.model, engine);
     a.start = Math.min(a.start, r.start);
     a.end = Math.max(a.end, r.end);
     a.msgs += r.msgs;
-    if (totalTokens(t) > a.t.output) a.model = r.model; // dominant model labels the session
+    if (totalTokens(t) > a.modelTokens) {
+      a.model = r.model; // the model with the most tokens labels the session
+      a.modelTokens = totalTokens(t);
+    }
     bySession.set(r.session, a);
   }
   return [...bySession.entries()]
@@ -188,7 +195,7 @@ async function buildSessions(db: D1Database, userId: string, limit = 15): Promis
     .slice(0, limit);
 }
 
-export function computeStreak(days: number[]): StreakInfo {
+export function computeStreak(days: number[], nowMs = Date.now()): StreakInfo {
   if (days.length === 0) return { longest: 0, current: 0, longestStart: null, longestEnd: null };
   const sorted = [...new Set(days)].sort((a, b) => a - b);
   let longest = 1;
@@ -209,11 +216,11 @@ export function computeStreak(days: number[]): StreakInfo {
       bestEnd = sorted[i];
     }
   }
-  // current streak: must reach today or yesterday (in local-ish day terms)
+  // Current streak: the last active day must be today or yesterday. Days are
+  // date keys, so any timezone's "today" is at least earliestTodayKey().
   const last = sorted[sorted.length - 1];
-  const todayStart = Math.floor(Date.now() / 1000 / DAY) * DAY;
   let current = 0;
-  if (last >= todayStart - DAY) {
+  if (last >= earliestTodayKey(nowMs) - DAY) {
     current = 1;
     for (let i = sorted.length - 1; i > 0; i--) {
       if (sorted[i] - sorted[i - 1] === DAY) current++;
@@ -308,7 +315,7 @@ export async function groupRollups(db: D1Database, userIds: string[]): Promise<U
     .prepare(
       `SELECT user_id, engine, model,
               SUM(input) AS input, SUM(cache_read) AS cache_read,
-              SUM(cache_create) AS cache_create, SUM(output) AS output
+              SUM(cache_create) AS cache_create, SUM(cache_create_1h) AS cache_create_1h, SUM(output) AS output
        FROM events WHERE user_id IN (${placeholders}) GROUP BY user_id, engine, model`,
     )
     .bind(...userIds)

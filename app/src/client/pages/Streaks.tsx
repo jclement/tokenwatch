@@ -2,7 +2,7 @@ import { useStats } from "../data";
 import { GlassCard, StatCard, SectionTitle, COLORS } from "../components/ui";
 import { Loading, EmptyState } from "../components/state";
 import { sarcasm } from "../../shared/sarcasm";
-import { fmtMoney, shortDay } from "../../shared/format";
+import { fmtMoney, shortDay, todayKey } from "../../shared/format";
 
 const DAY = 86_400;
 
@@ -14,8 +14,8 @@ export function Streaks() {
   const costByDay = new Map(stats.heatmap.map((h) => [h.day, h.cost]));
   const max = Math.max(...stats.heatmap.map((h) => h.cost), 0.01);
 
-  // 26-week grid ending today.
-  const todayStart = Math.floor(Date.now() / 1000 / DAY) * DAY;
+  // 26-week grid ending today (the viewer's date; heatmap days are date keys).
+  const todayStart = todayKey();
   const weeks = 26;
   const cells: { day: number; cost: number }[] = [];
   const start = todayStart - (weeks * 7 - 1) * DAY;

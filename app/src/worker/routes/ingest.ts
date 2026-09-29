@@ -4,6 +4,7 @@ import type { Env, Vars } from "../env";
 import { getDb } from "../db";
 import { devices, pairingCodes, users } from "../../db/schema";
 import { randomId, sha256Hex } from "../lib/crypto";
+import { dayKey } from "../lib/days";
 import type { IngestRequest, IngestResponse, IngestEvent } from "../../shared/types";
 
 export const ingestRoutes = new Hono<{ Bindings: Env; Variables: Vars }>();
@@ -67,7 +68,10 @@ async function deviceFromAuth(c: { req: { header: (k: string) => string | undefi
   return { userId: dev.userId, db, now };
 }
 
-// Sanitized stats push. Dedups via INSERT OR IGNORE on (user_id, id).
+// Sanitized stats push, keyed on (user_id, id). A usage id that arrives again
+// keeps the larger value of each token count: Claude Code logs one response
+// over several lines and early lines can carry a partial output count, so an
+// agent that synced mid-response must be able to correct it later.
 ingestRoutes.post("/ingest", async (c) => {
   const body = await c.req.json<IngestRequest>();
   const auth = await deviceFromAuth(c, c.env, body.agentVersion);
@@ -82,6 +86,7 @@ ingestRoutes.post("/ingest", async (c) => {
   const stmts: D1PreparedStatement[] = [];
   for (const e of list) {
     if (!validEvent(e)) continue;
+    const day = dayKey(e.day);
     // The agent emits two record kinds (mirroring the Swift two-table split):
     // usage records (token counts, engine+model) and text records (confessional
     // counts, no tokens, model ""). Route each to its own table — a zero-token
@@ -91,12 +96,22 @@ ingestRoutes.post("/ingest", async (c) => {
     if (hasTokens && (e.engine === "Claude" || e.engine === "Codex")) {
       stmts.push(
         c.env.DB.prepare(
-          `INSERT OR IGNORE INTO events
-           (user_id,id,day,ts,hour,session,engine,model,input,cache_read,cache_create,output)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO events
+           (user_id,id,day,ts,hour,session,engine,model,input,cache_read,cache_create,cache_create_1h,output)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+           ON CONFLICT(user_id,id) DO UPDATE SET
+             input = MAX(input, excluded.input),
+             cache_read = MAX(cache_read, excluded.cache_read),
+             cache_create = MAX(cache_create, excluded.cache_create),
+             cache_create_1h = MAX(cache_create_1h, excluded.cache_create_1h),
+             output = MAX(output, excluded.output)
+           WHERE excluded.input > input OR excluded.cache_read > cache_read
+              OR excluded.cache_create > cache_create
+              OR excluded.cache_create_1h > cache_create_1h
+              OR excluded.output > output`,
         ).bind(
-          userId, e.id, e.day, e.ts, e.hour, e.session ?? "", e.engine, e.model,
-          e.input | 0, e.cacheRead | 0, e.cacheCreate | 0, e.output | 0,
+          userId, e.id, day, e.ts, e.hour, e.session ?? "", e.engine, e.model,
+          e.input | 0, e.cacheRead | 0, e.cacheCreate | 0, (e.cacheCreate1h ?? 0) | 0, e.output | 0,
         ),
       );
     }
@@ -106,7 +121,7 @@ ingestRoutes.post("/ingest", async (c) => {
         c.env.DB.prepare(
           `INSERT OR IGNORE INTO text_stats (user_id,id,day,swears,polite,agreed,sorry)
            VALUES (?,?,?,?,?,?,?)`,
-        ).bind(userId, e.id, e.day, e.swears | 0, e.polite | 0, e.agreed | 0, e.sorry | 0),
+        ).bind(userId, e.id, day, e.swears | 0, e.polite | 0, e.agreed | 0, e.sorry | 0),
       );
     }
     if (e.swearWords) {

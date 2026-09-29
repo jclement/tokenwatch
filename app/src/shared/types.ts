@@ -13,14 +13,17 @@ import type { Engine, TokenTotals } from "./pricing";
 export interface IngestEvent {
   id: string;
   ts: number; // epoch seconds
-  day: number; // start-of-day epoch seconds (agent-local)
+  // Agent-local midnight as epoch seconds. The worker stores it as a calendar
+  // date key (see dayKey in the ingest route), not as this instant.
+  day: number;
   hour: number; // local hour 0-23, or -1 if unknown
   session: string;
   engine: Engine;
   model: string;
   input: number;
   cacheRead: number;
-  cacheCreate: number;
+  cacheCreate: number; // all cache writes
+  cacheCreate1h?: number; // 1-hour-TTL subset of cacheCreate; absent from older agents
   output: number;
   // Confessional counts (fixed lexicon; no free text).
   swears: number;
@@ -44,8 +47,10 @@ export interface IngestResponse {
 
 // ---- Aggregates (worker → client) -------------------------------------------
 
+// Every `day` the worker returns is a calendar-date key: UTC midnight of the
+// agent's local date, so format it in UTC (shortDay does) and step by 86400.
 export interface DayPoint {
-  day: number; // epoch seconds
+  day: number;
   tokens: TokenTotals;
   cost: number;
 }

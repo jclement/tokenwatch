@@ -5,7 +5,7 @@ import { useAuth } from "./auth";
 import { useStats } from "./data";
 import { api } from "./api";
 import { sarcasm } from "../shared/sarcasm";
-import { fmtInt } from "../shared/format";
+import { fmtInt, shortDay } from "../shared/format";
 import { Spinner, Banner } from "./components/ui";
 import type { VersionInfo } from "../shared/types";
 
@@ -127,7 +127,7 @@ function LiveDot({ justUpdated }: { justUpdated: boolean }) {
 
 function Header({ seed, onMenu }: { seed: number; onMenu: () => void }) {
   const { user, logout } = useAuth();
-  const { stats, loading, refresh, justUpdated } = useStats();
+  const { stats, loading, error, refresh, justUpdated } = useStats();
   const [version, setVersion] = useState<VersionInfo | null>(null);
 
   useEffect(() => {
@@ -140,7 +140,7 @@ function Header({ seed, onMenu }: { seed: number; onMenu: () => void }) {
     const parts = [`${fmtInt(stats.messages)} messages archived`];
     if (stats.historyStart)
       parts.push(
-        `history since ${new Date(stats.historyStart * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
+        `history since ${shortDay(stats.historyStart)}`,
       );
     parts.push(`${stats.activeDays} active days`);
     return parts.join(" · ");
@@ -148,6 +148,11 @@ function Header({ seed, onMenu }: { seed: number; onMenu: () => void }) {
 
   return (
     <header className="border-b border-white/[0.06] bg-bg/40">
+      {error && stats && (
+        <div className="px-4 pt-3 sm:px-6">
+          <Banner tone="coral">Couldn't refresh ({error}) — showing the last numbers that loaded.</Banner>
+        </div>
+      )}
       {version?.workerStale && (
         <div className="px-4 pt-3 sm:px-6">
           <Banner tone="amber">

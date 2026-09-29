@@ -26,4 +26,10 @@ describe("computeStreak", () => {
     const s = computeStreak([day(1), day(2), day(3)]);
     expect(s.current).toBe(0);
   });
+
+  it("counts a streak that ends yesterday as current", () => {
+    const now = (day(100) + 15 * 3600) * 1000; // day 100, 15:00 UTC
+    expect(computeStreak([day(97), day(98), day(99)], now).current).toBe(3);
+    expect(computeStreak([day(97), day(98)], now).current).toBe(0);
+  });
 });

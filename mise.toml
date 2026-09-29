@@ -94,6 +94,12 @@ description = "Validate the GoReleaser config"
 dir = "agent"
 run = "goreleaser check"
 
+# ---- Gate --------------------------------------------------------------------
+
+[tasks.check]
+description = "Lint + typecheck + all tests (web and agent) — the gate before calling work done"
+depends = ["lint", "typecheck", "test", "agent:test"]
+
 # ---- Release ----------------------------------------------------------------
 
 [tasks.release]

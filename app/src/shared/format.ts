@@ -30,11 +30,28 @@ export function fmtDuration(seconds: number): string {
   return `${s}s`;
 }
 
-export function shortDay(epochSec: number): string {
-  return new Date(epochSec * 1000).toLocaleDateString("en-US", {
+// Day keys from the worker are UTC midnight of a calendar date, so they are
+// formatted in UTC; the viewer's own timezone would shift them a day.
+export function shortDay(dayKey: number): string {
+  return new Date(dayKey * 1000).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
+}
+
+// "Sep 2026" for a day key.
+export function monthYear(dayKey: number): string {
+  return new Date(dayKey * 1000).toLocaleDateString("en-US", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+// Today's date in the viewer's timezone, as a day key.
+export function todayKey(now = new Date()): number {
+  return Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 1000;
 }
 
 export function shortDayTime(epochSec: number): string {

@@ -4,6 +4,7 @@ import { api } from "../api";
 import { GlassCard, Spinner } from "../components/ui";
 import { PublicStatsView } from "../components/StatsView";
 import type { PublicStats } from "../../shared/types";
+import { monthYear } from "../../shared/format";
 
 export function PublicShare() {
   const { token } = useParams<{ token: string }>();
@@ -52,7 +53,7 @@ export function PublicShare() {
             <p className="mt-1 text-[13px] text-faint">
               {data.messages.toLocaleString()} messages · since{" "}
               {data.historyStart
-                ? new Date(data.historyStart * 1000).toLocaleDateString("en-US", { month: "short", year: "numeric" })
+                ? monthYear(data.historyStart)
                 : "—"}
             </p>
           </div>

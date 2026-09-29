@@ -51,7 +51,8 @@ mise run dev:agent -- --pair ABCD-1234     # pair this machine
 mise run dev:agent                          # --once sync (the default)
 ```
 
-Other tasks: `mise run typecheck`, `mise run lint`, `mise run test`, `mise run agent:test`,
+`mise run check` is the gate (lint + typecheck + web and agent tests). Other tasks:
+`mise run typecheck`, `mise run lint`, `mise run test`, `mise run agent:test`,
 `mise run build`, `mise run agent:build`.
 
 ## The agent

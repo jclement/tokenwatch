@@ -98,7 +98,7 @@ export const events = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     id: text("id").notNull(),
-    day: integer("day").notNull(), // start-of-day epoch seconds
+    day: integer("day").notNull(), // calendar-date key: UTC midnight of the agent-local date
     ts: integer("ts").notNull().default(0),
     hour: integer("hour").notNull().default(-1),
     session: text("session").notNull().default(""),
@@ -106,7 +106,8 @@ export const events = sqliteTable(
     model: text("model").notNull(),
     input: integer("input").notNull(),
     cacheRead: integer("cache_read").notNull(),
-    cacheCreate: integer("cache_create").notNull(),
+    cacheCreate: integer("cache_create").notNull(), // all cache writes
+    cacheCreate1h: integer("cache_create_1h").notNull().default(0), // 1-hour-TTL subset
     output: integer("output").notNull(),
   },
   (t) => [

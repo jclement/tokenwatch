@@ -41,8 +41,11 @@ type IngestEvent struct {
 
 	Input       int `json:"input"`
 	CacheRead   int `json:"cacheRead"`
-	CacheCreate int `json:"cacheCreate"`
-	Output      int `json:"output"`
+	CacheCreate int `json:"cacheCreate"` // all cache writes
+	// CacheCreate1h is the 1-hour-TTL subset of CacheCreate, which Anthropic
+	// bills at 2x input rather than 1.25x.
+	CacheCreate1h int `json:"cacheCreate1h"`
+	Output        int `json:"output"`
 
 	Swears int `json:"swears"`
 	Polite int `json:"polite"`
@@ -55,7 +58,18 @@ type IngestEvent struct {
 }
 
 // total is the sum of all four token flavors — used to skip empty usage records.
+// CacheCreate1h is a subset of CacheCreate, so it is not added.
 func (e IngestEvent) total() int { return e.Input + e.CacheRead + e.CacheCreate + e.Output }
+
+// mergeMax folds another reading of the same message into e, keeping the
+// larger value of each token count (the fullest reading wins).
+func (e *IngestEvent) mergeMax(o IngestEvent) {
+	e.Input = max(e.Input, o.Input)
+	e.CacheRead = max(e.CacheRead, o.CacheRead)
+	e.CacheCreate = max(e.CacheCreate, o.CacheCreate)
+	e.CacheCreate1h = max(e.CacheCreate1h, o.CacheCreate1h)
+	e.Output = max(e.Output, o.Output)
+}
 
 // HomeDir lets tests point the parser at a fixture tree.
 type Parser struct {
@@ -227,10 +241,13 @@ type claudeMessage struct {
 }
 
 type claudeUsage struct {
-	Input       int `json:"input_tokens"`
-	CacheRead   int `json:"cache_read_input_tokens"`
-	CacheCreate int `json:"cache_creation_input_tokens"`
-	Output      int `json:"output_tokens"`
+	Input         int `json:"input_tokens"`
+	CacheRead     int `json:"cache_read_input_tokens"`
+	CacheCreate   int `json:"cache_creation_input_tokens"`
+	Output        int `json:"output_tokens"`
+	CacheCreation *struct {
+		OneHour int `json:"ephemeral_1h_input_tokens"`
+	} `json:"cache_creation"`
 }
 
 func parseClaude(path string, shareSwearWords bool) []IngestEvent {
@@ -243,6 +260,10 @@ func parseClaude(path string, shareSwearWords bool) []IngestEvent {
 	file := filepath.Base(path)
 	var out []IngestEvent
 	usageOrdinal := 0 // mirrors Swift's out.usage.count fallback id
+	// Claude Code writes one response as several lines (one per content block),
+	// each repeating the usage, and early lines can carry a partial output
+	// count. usageAt maps a message id to its event in out so repeats merge.
+	usageAt := map[string]int{}
 
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1024*1024), 64*1024*1024) // log lines can be large
@@ -285,7 +306,12 @@ func parseClaude(path string, shareSwearWords bool) []IngestEvent {
 						CacheCreate: msg.Usage.CacheCreate,
 						Output:      msg.Usage.Output,
 					}
-					if ev.total() > 0 {
+					if msg.Usage.CacheCreation != nil {
+						ev.CacheCreate1h = msg.Usage.CacheCreation.OneHour
+					}
+					if i, seen := usageAt[msg.ID]; seen && msg.ID != "" {
+						out[i].mergeMax(ev)
+					} else if ev.total() > 0 {
 						id := msg.ID
 						if id == "" {
 							id = cl.RequestID
@@ -304,6 +330,9 @@ func parseClaude(path string, shareSwearWords bool) []IngestEvent {
 						ev.Session = session
 						ev.Engine = EngineClaude
 						ev.Model = model
+						if msg.ID != "" {
+							usageAt[msg.ID] = len(out)
+						}
 						out = append(out, ev)
 						usageOrdinal++
 					}
@@ -362,7 +391,8 @@ type codexPayload struct {
 }
 
 type codexInfo struct {
-	LastTokenUsage *codexTokenUsage `json:"last_token_usage"`
+	LastTokenUsage  *codexTokenUsage `json:"last_token_usage"`
+	TotalTokenUsage json.RawMessage  `json:"total_token_usage"`
 }
 
 type codexTokenUsage struct {
@@ -383,6 +413,9 @@ func parseCodex(path string) []IngestEvent {
 	foundModel := false
 	var out []IngestEvent
 	ordinal := 0
+	// Codex sometimes repeats a token_count event verbatim (e.g. when only the
+	// rate-limit info changed). An unchanged running total means no new usage.
+	var prevTotal string
 
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 1024*1024), 64*1024*1024)
@@ -429,8 +462,11 @@ func parseCodex(path string) []IngestEvent {
 			CacheRead: u.Cached,
 			Output:    u.Output,
 		}
-		ordinal++ // ordinal increments even for zero-total lines, matching Swift
-		if ev.total() == 0 {
+		ordinal++ // ordinal increments even for zero-total and repeated lines, so ids stay stable
+		total := string(pl.Info.TotalTokenUsage)
+		repeated := total != "" && total == prevTotal
+		prevTotal = total
+		if repeated || ev.total() == 0 {
 			continue
 		}
 		ev.ID = "codex:" + file + ":" + itoa(ordinal)

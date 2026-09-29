@@ -176,3 +176,44 @@ func TestSwiftDoubleFormat(t *testing.T) {
 		}
 	}
 }
+
+// One Claude response logged as three lines: the first two carry a partial
+// output count, the last the final one. They must merge into one event with
+// the largest counts, and keep the 1-hour cache-write split.
+func TestClaudeMergesMessageLines(t *testing.T) {
+	const body = `{"type":"assistant","timestamp":"2026-09-29T15:00:00.000Z","sessionId":"s","message":{"id":"msg_1","model":"claude-opus-4-6","content":[{"type":"thinking"}],"usage":{"input_tokens":2,"cache_read_input_tokens":100,"cache_creation_input_tokens":50,"cache_creation":{"ephemeral_5m_input_tokens":10,"ephemeral_1h_input_tokens":40},"output_tokens":7}}}
+{"type":"assistant","timestamp":"2026-09-29T15:00:01.000Z","sessionId":"s","message":{"id":"msg_1","model":"claude-opus-4-6","content":[{"type":"tool_use"}],"usage":{"input_tokens":2,"cache_read_input_tokens":100,"cache_creation_input_tokens":50,"cache_creation":{"ephemeral_5m_input_tokens":10,"ephemeral_1h_input_tokens":40},"output_tokens":7}}}
+{"type":"assistant","timestamp":"2026-09-29T15:00:02.000Z","sessionId":"s","message":{"id":"msg_1","model":"claude-opus-4-6","content":[{"type":"tool_use"}],"usage":{"input_tokens":2,"cache_read_input_tokens":100,"cache_creation_input_tokens":50,"cache_creation":{"ephemeral_5m_input_tokens":10,"ephemeral_1h_input_tokens":40},"output_tokens":1035}}}
+`
+	path := writeFixture(t, t.TempDir(), "s.jsonl", body)
+	var usage []IngestEvent
+	for _, e := range parseClaude(path, false) {
+		if e.total() > 0 {
+			usage = append(usage, e)
+		}
+	}
+	if len(usage) != 1 {
+		t.Fatalf("want 1 usage event, got %d", len(usage))
+	}
+	u := usage[0]
+	if u.ID != "msg_1" || u.Output != 1035 || u.CacheCreate != 50 || u.CacheCreate1h != 40 {
+		t.Fatalf("merged event wrong: %+v", u)
+	}
+}
+
+// A token_count repeated with an unchanged running total is not new usage,
+// and skipping it must not shift the ids of the events after it.
+func TestCodexSkipsRepeatedTokenCounts(t *testing.T) {
+	const body = `{"timestamp":"2026-09-29T16:00:00.000Z","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":10},"last_token_usage":{"input_tokens":100,"cached_input_tokens":0,"output_tokens":10}}}}
+{"timestamp":"2026-09-29T16:00:01.000Z","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":10},"last_token_usage":{"input_tokens":100,"cached_input_tokens":0,"output_tokens":10}}}}
+{"timestamp":"2026-09-29T16:01:00.000Z","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":150,"output_tokens":15},"last_token_usage":{"input_tokens":50,"cached_input_tokens":0,"output_tokens":5}}}}
+`
+	path := writeFixture(t, t.TempDir(), "rollout.jsonl", body)
+	events := parseCodex(path)
+	if len(events) != 2 {
+		t.Fatalf("want 2 events, got %d: %+v", len(events), events)
+	}
+	if events[0].ID != "codex:rollout.jsonl:1" || events[1].ID != "codex:rollout.jsonl:3" {
+		t.Fatalf("ids shifted: %s, %s", events[0].ID, events[1].ID)
+	}
+}
