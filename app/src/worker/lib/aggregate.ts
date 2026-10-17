@@ -20,7 +20,7 @@ import type {
   StreakInfo,
   TextTotals,
 } from "../../shared/types";
-import { buildCube, type DeviceRow } from "../../shared/cube";
+import { buildCube, machineKeyer, type DeviceRow } from "../../shared/cube";
 import { DAY, earliestTodayKey } from "./days";
 
 // Curate a full StatsPayload down to the read-only PublicStats shown on the
@@ -301,7 +301,7 @@ export async function personalStats(db: D1Database, userId: string): Promise<Sta
     byModel: buildBreakdown(rows, "model"),
     byEngine: buildBreakdown(rows, "engine"),
     hourly: buildHourly(hours),
-    topSessions,
+    topSessions: topSessions.map((s) => ({ ...s, device: machineKeyer(devices)(s.device) })),
     streak: computeStreak(timeline.map((p) => p.day)),
     heatmap: timeline.map((p) => ({ day: p.day, cost: p.cost })),
     text,

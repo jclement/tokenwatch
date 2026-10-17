@@ -35,8 +35,8 @@ function payload(): StatsPayload {
   return {
     cube,
     topSessions: [
-      { id: "s1", engine: "Claude", model: "claude-opus-4-5", device: "lap", start: 0, end: 1, tokens: { input: 1, cacheRead: 0, cacheCreate: 0, cacheCreate1h: 0, output: 0 }, cost: 1, messages: 1 },
-      { id: "s2", engine: "Codex", model: "gpt-5-codex", device: "desk", start: 0, end: 1, tokens: { input: 1, cacheRead: 0, cacheCreate: 0, cacheCreate1h: 0, output: 0 }, cost: 1, messages: 1 },
+      { id: "s1", engine: "Claude", model: "claude-opus-4-5", device: "name:laptop", start: 0, end: 1, tokens: { input: 1, cacheRead: 0, cacheCreate: 0, cacheCreate1h: 0, output: 0 }, cost: 1, messages: 1 },
+      { id: "s2", engine: "Codex", model: "gpt-5-codex", device: "name:desk", start: 0, end: 1, tokens: { input: 1, cacheRead: 0, cacheCreate: 0, cacheCreate1h: 0, output: 0 }, cost: 1, messages: 1 },
     ],
   } as unknown as StatsPayload;
 }
@@ -44,9 +44,23 @@ function payload(): StatsPayload {
 describe("buildCube", () => {
   it("names unattributed and removed machines and keeps paired ones first", () => {
     const { machines } = payload().cube;
-    expect(machines.map((m) => m.name)).toEqual(["laptop", "desk", "Unattributed", "Removed machine"]);
+    expect(machines.map((m) => m.name)).toEqual(["laptop", "desk", "Unattributed", "Deleted key"]);
     expect(machines[3].removed).toBe(true);
     expect(machines[2].removed).toBe(false);
+  });
+
+  it("merges keys that share a name into one machine", () => {
+    const cube = buildCube(
+      [row(1, "a", "Claude", "claude-opus-4-5", 10), row(2, "b", "Claude", "claude-opus-4-5", 5)],
+      [],
+      [
+        { id: "a", name: "relic", platform: "linux", arch: "amd64", last_seen_at: 1 },
+        { id: "b", name: "relic", platform: "linux", arch: "arm64", last_seen_at: 9 },
+      ],
+    );
+    expect(cube.machines).toHaveLength(1);
+    expect(cube.machines[0]).toMatchObject({ id: "name:relic", arch: "arm64", lastSeenAt: 9 });
+    expect(new Set(cube.rows.map((r) => r[2]))).toEqual(new Set([0]));
   });
 
   it("dedups (engine, model) pairs", () => {
@@ -59,14 +73,14 @@ describe("deriveView", () => {
     const v = deriveView(payload(), noFilters());
     expect(totalTokens(v.grandTotals)).toBe(3_660_000);
     expect(v.activeDays).toBe(2);
-    expect(v.byMachine.map((m) => m.key).sort()).toEqual(["", "desk", "gone", "lap"]);
+    expect(v.byMachine.map((m) => m.key).sort()).toEqual(["", "name:desk", "name:laptop", "removed:gone"]);
     expect(v.filtered).toBe(false);
     const sum = v.byModel.reduce((s, m) => s + m.cost, 0);
     expect(sum).toBeCloseTo(v.grandCost, 6);
   });
 
   it("drops an unchecked machine from every aggregate", () => {
-    const v = deriveView(payload(), { ...noFilters(), machines: ["desk"] });
+    const v = deriveView(payload(), { ...noFilters(), machines: ["name:desk"] });
     expect(v.byEngine.map((e) => e.key)).toEqual(["Claude"]);
     expect(v.sessions.map((s) => s.id)).toEqual(["s1"]);
     expect(v.hourly[1].tokens).toBe(0);
@@ -86,8 +100,8 @@ describe("stackByDay", () => {
     const order: SeriesDef[] = v.byMachine.map((m) => ({ key: m.key, label: m.label }));
     const { rows, series } = stackByDay(v, "machine", "tokens", order);
     expect(rows.map((r) => r.day)).toEqual([1 * D, 2 * D, 3 * D]);
-    expect(rows[1].lap).toBe(0);
-    expect(rows[0].desk).toBe(2_000_000);
+    expect(rows[1]["name:laptop"]).toBe(0);
+    expect(rows[0]["name:desk"]).toBe(2_000_000);
     expect(series).toHaveLength(4);
   });
 
@@ -105,7 +119,7 @@ describe("stackByDay", () => {
 describe("matrix", () => {
   it("crosses machines with models", () => {
     const m = matrix(deriveView(payload(), noFilters()), "tokens");
-    expect(m.get("lap")?.get("Claude:claude-opus-4-5")).toBe(1_010_000);
-    expect(m.get("desk")?.get("Codex:gpt-5-codex")).toBe(2_000_000);
+    expect(m.get("name:laptop")?.get("Claude:claude-opus-4-5")).toBe(1_010_000);
+    expect(m.get("name:desk")?.get("Codex:gpt-5-codex")).toBe(2_000_000);
   });
 });

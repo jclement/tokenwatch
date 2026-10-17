@@ -31,8 +31,17 @@ export interface DeviceRow {
   last_seen_at: number | null;
 }
 
+// A machine is identified by the name of the device key that uploaded the
+// data, so re-pairing a machine under the same name keeps one machine rather
+// than splitting it in two. Returns devices.id → machine id ("name:<name>";
+// "" stays Unattributed; a key that has since been deleted is "removed:<id>").
+export function machineKeyer(devices: DeviceRow[]): (deviceId: string) => string {
+  const byId = new Map(devices.map((d) => [d.id, `name:${d.name || "device"}`]));
+  return (id) => (id === "" ? "" : (byId.get(id) ?? `removed:${id}`));
+}
+
 // Pack the day and hour buckets into the compact, filterable cube. Machines are
-// every device that uploaded something plus every paired device, so a fresh
+// every device key that uploaded something plus every paired key, so a fresh
 // machine shows up before its first sync lands.
 export function buildCube(
   rows: (Bucket & { day: number })[],
@@ -51,22 +60,36 @@ export function buildCube(
     }
     return i;
   };
-  const machines: MachineInfo[] = devices.map((d) => ({
-    id: d.id,
-    name: d.name || "device",
-    platform: d.platform,
-    arch: d.arch,
-    lastSeenAt: d.last_seen_at,
-    removed: false,
-  }));
-  const machineIdx = new Map(machines.map((m, i) => [m.id, i]));
-  const di = (id: string) => {
+  const keyOf = machineKeyer(devices);
+  const machines: MachineInfo[] = [];
+  const machineIdx = new Map<string, number>();
+  // Same-named keys merge; the most recently seen one supplies platform/arch.
+  for (const d of [...devices].sort((a, b) => (a.last_seen_at ?? 0) - (b.last_seen_at ?? 0))) {
+    const id = keyOf(d.id);
+    const m: MachineInfo = {
+      id,
+      name: d.name || "device",
+      platform: d.platform,
+      arch: d.arch,
+      lastSeenAt: d.last_seen_at,
+      removed: false,
+    };
+    const i = machineIdx.get(id);
+    if (i === undefined) {
+      machineIdx.set(id, machines.length);
+      machines.push(m);
+    } else {
+      machines[i] = { ...m, lastSeenAt: Math.max(machines[i].lastSeenAt ?? 0, d.last_seen_at ?? 0) || null };
+    }
+  }
+  const di = (deviceId: string) => {
+    const id = keyOf(deviceId);
     let i = machineIdx.get(id);
     if (i === undefined) {
       i = machines.length;
       machines.push({
         id,
-        name: id === "" ? "Unattributed" : "Removed machine",
+        name: id === "" ? "Unattributed" : "Deleted key",
         platform: null,
         arch: null,
         lastSeenAt: null,

@@ -42,8 +42,8 @@ export function ByMachine() {
       {unattributed && (
         <Banner tone="amber">
           {fmtMoney(unattributed.cost)} ({fmtTokens(totalTokens(unattributed.tokens))} tokens) was synced before TokenWatch
-          recorded which machine sent it, so it shows as <span className="font-semibold">Unattributed</span>. Each machine
-          re-sends its history once after upgrading its agent, and those rows move to the right machine.
+          recorded which key sent it, so it shows as <span className="font-semibold">Unattributed</span>. Each machine
+          re-sends its history once after upgrading to agent 0.4.0 or later, and those rows move to that key's machine.
         </Banner>
       )}
 

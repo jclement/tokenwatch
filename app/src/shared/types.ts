@@ -72,7 +72,7 @@ export interface SessionAgg {
   id: string;
   engine: Engine;
   model: string;
-  device: string; // devices.id, "" if unattributed
+  device: string; // machine id (see machineKeyer), "" if unattributed
   start: number;
   end: number;
   tokens: TokenTotals;
@@ -94,9 +94,9 @@ export interface StreakInfo {
   longestEnd: number | null;
 }
 
-// A machine that has uploaded usage. `id` is devices.id; "" collects events
-// ingested before per-machine tracking. `removed` marks a device that has
-// since been unpaired (its events stay).
+// A machine that has uploaded usage, identified by its device key's name
+// (`id` is "name:<name>"); "" collects events ingested before per-machine
+// tracking. `removed` marks a key that has since been deleted (its events stay).
 export interface MachineInfo {
   id: string;
   name: string;

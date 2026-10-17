@@ -29,6 +29,13 @@
       "when": 1792257262498,
       "tag": "0003_lowly_leper_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792258816567,
+      "tag": "0004_attribute_single_key",
+      "breakpoints": true
     }
   ]
 }
