@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { NAV } from "./nav";
+import { FilterBar } from "./components/FilterBar";
 import { useAuth } from "./auth";
 import { useStats } from "./data";
 import { api } from "./api";
@@ -8,6 +9,9 @@ import { sarcasm } from "../shared/sarcasm";
 import { fmtInt, shortDay } from "../shared/format";
 import { Spinner, Banner } from "./components/ui";
 import type { VersionInfo } from "../shared/types";
+
+// Pages that honour the filter bar; the others show all-time, unfiltered data.
+const FILTERED = new Set(["/", "/over-time", "/by-model", "/by-engine", "/by-machine", "/night-owl", "/hall-of-fame"]);
 
 export function Layout({ children }: { children: ReactNode }) {
   const { seed } = useStats();
@@ -37,7 +41,10 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <Header seed={seed} onMenu={() => setNavOpen(true)} />
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-6xl p-4 sm:p-6">{children}</div>
+          <div className="mx-auto max-w-6xl p-4 sm:p-6">
+            {FILTERED.has(location.pathname) && <FilterBar />}
+            {children}
+          </div>
         </div>
       </div>
     </div>

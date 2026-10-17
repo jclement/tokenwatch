@@ -65,18 +65,19 @@ async function deviceFromAuth(c: { req: { header: (k: string) => string | undefi
     .update(devices)
     .set({ lastSeenAt: now, agentVersion: agentVersion ?? dev.agentVersion })
     .where(eq(devices.id, deviceId));
-  return { userId: dev.userId, db, now };
+  return { userId: dev.userId, deviceId: dev.id, db, now };
 }
 
 // Sanitized stats push, keyed on (user_id, id). A usage id that arrives again
 // keeps the larger value of each token count: Claude Code logs one response
 // over several lines and early lines can carry a partial output count, so an
-// agent that synced mid-response must be able to correct it later.
+// agent that synced mid-response must be able to correct it later. A row from
+// before per-machine tracking (device_id "") takes the device that re-sends it.
 ingestRoutes.post("/ingest", async (c) => {
   const body = await c.req.json<IngestRequest>();
   const auth = await deviceFromAuth(c, c.env, body.agentVersion);
   if (!auth) return c.json({ error: "unauthorized" }, 401);
-  const { userId, db, now } = auth;
+  const { userId, deviceId, db, now } = auth;
 
   const list = Array.isArray(body.events) ? body.events : [];
   if (list.length === 0) return c.json<IngestResponse>({ received: 0, inserted: 0 });
@@ -97,9 +98,10 @@ ingestRoutes.post("/ingest", async (c) => {
       stmts.push(
         c.env.DB.prepare(
           `INSERT INTO events
-           (user_id,id,day,ts,hour,session,engine,model,input,cache_read,cache_create,cache_create_1h,output)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+           (user_id,id,day,ts,hour,session,device_id,engine,model,input,cache_read,cache_create,cache_create_1h,output)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT(user_id,id) DO UPDATE SET
+             device_id = CASE WHEN device_id = '' THEN excluded.device_id ELSE device_id END,
              input = MAX(input, excluded.input),
              cache_read = MAX(cache_read, excluded.cache_read),
              cache_create = MAX(cache_create, excluded.cache_create),
@@ -108,9 +110,10 @@ ingestRoutes.post("/ingest", async (c) => {
            WHERE excluded.input > input OR excluded.cache_read > cache_read
               OR excluded.cache_create > cache_create
               OR excluded.cache_create_1h > cache_create_1h
-              OR excluded.output > output`,
+              OR excluded.output > output
+              OR device_id = ''`,
         ).bind(
-          userId, e.id, day, e.ts, e.hour, e.session ?? "", e.engine, e.model,
+          userId, e.id, day, e.ts, e.hour, e.session ?? "", deviceId, e.engine, e.model,
           e.input | 0, e.cacheRead | 0, e.cacheCreate | 0, (e.cacheCreate1h ?? 0) | 0, e.output | 0,
         ),
       );

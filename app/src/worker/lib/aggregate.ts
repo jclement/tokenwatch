@@ -20,6 +20,7 @@ import type {
   StreakInfo,
   TextTotals,
 } from "../../shared/types";
+import { buildCube, type DeviceRow } from "../../shared/cube";
 import { DAY, earliestTodayKey } from "./days";
 
 // Curate a full StatsPayload down to the read-only PublicStats shown on the
@@ -41,8 +42,9 @@ export function toPublicStats(user: PublicUser, stats: StatsPayload): PublicStat
 }
 
 
-interface DemRow {
+export interface DemRow {
   day: number;
+  device_id: string;
   engine: string;
   model: string;
   input: number;
@@ -66,14 +68,14 @@ const totalsOf = (r: {
   output: r.output,
 });
 
-// All per-(day,engine,model) buckets for a user — the base for most views.
+// All per-(day,device,engine,model) buckets for a user — the base for most views.
 async function demRows(db: D1Database, userId: string): Promise<DemRow[]> {
   const res = await db
     .prepare(
-      `SELECT day, engine, model,
+      `SELECT day, device_id, engine, model,
               SUM(input) AS input, SUM(cache_read) AS cache_read,
               SUM(cache_create) AS cache_create, SUM(cache_create_1h) AS cache_create_1h, SUM(output) AS output
-       FROM events WHERE user_id = ? GROUP BY day, engine, model`,
+       FROM events WHERE user_id = ? GROUP BY day, device_id, engine, model`,
     )
     .bind(userId)
     .all<DemRow>();
@@ -112,20 +114,26 @@ function buildBreakdown(rows: DemRow[], by: "model" | "engine"): BreakdownRow[] 
     .sort((a, b) => b.cost - a.cost);
 }
 
-async function buildHourly(db: D1Database, userId: string): Promise<HourBucket[]> {
+export type HourRow = DemRow & { hour: number };
+
+async function hourRows(db: D1Database, userId: string): Promise<HourRow[]> {
   const res = await db
     .prepare(
-      `SELECT hour, engine, model,
+      `SELECT hour, device_id, engine, model,
               SUM(input) AS input, SUM(cache_read) AS cache_read,
               SUM(cache_create) AS cache_create, SUM(cache_create_1h) AS cache_create_1h, SUM(output) AS output
        FROM events WHERE user_id = ? AND hour BETWEEN 0 AND 23
-       GROUP BY hour, engine, model`,
+       GROUP BY hour, device_id, engine, model`,
     )
     .bind(userId)
-    .all<DemRow & { hour: number }>();
+    .all<HourRow>();
+  return res.results ?? [];
+}
+
+function buildHourly(rows: HourRow[]): HourBucket[] {
   const cost = new Array(24).fill(0);
   const toks = new Array(24).fill(0);
-  for (const r of res.results ?? []) {
+  for (const r of rows) {
     const t = totalsOf(r);
     cost[r.hour] += costOf(t, r.model, r.engine as Engine);
     toks[r.hour] += totalTokens(t);
@@ -140,10 +148,10 @@ interface SessRow extends DemRow {
   msgs: number;
 }
 
-async function buildSessions(db: D1Database, userId: string, limit = 15): Promise<SessionAgg[]> {
+async function buildSessions(db: D1Database, userId: string, limit = 50): Promise<SessionAgg[]> {
   const res = await db
     .prepare(
-      `SELECT session, engine, model, MIN(ts) AS start, MAX(ts) AS end, COUNT(*) AS msgs,
+      `SELECT session, MAX(device_id) AS device_id, engine, model, MIN(ts) AS start, MAX(ts) AS end, COUNT(*) AS msgs,
               SUM(input) AS input, SUM(cache_read) AS cache_read,
               SUM(cache_create) AS cache_create, SUM(cache_create_1h) AS cache_create_1h, SUM(output) AS output
        FROM events WHERE user_id = ? AND session != '' AND ts > 0
@@ -154,6 +162,7 @@ async function buildSessions(db: D1Database, userId: string, limit = 15): Promis
 
   interface Acc {
     engine: Engine;
+    device: string;
     model: string;
     modelTokens: number; // tokens of the model currently labelling the session
     t: TokenTotals;
@@ -168,7 +177,7 @@ async function buildSessions(db: D1Database, userId: string, limit = 15): Promis
     const t = totalsOf(r);
     const a =
       bySession.get(r.session) ??
-      ({ engine, model: r.model, modelTokens: 0, t: emptyTotals(), cost: 0, start: r.start, end: r.end, msgs: 0 } as Acc);
+      ({ engine, device: r.device_id, model: r.model, modelTokens: 0, t: emptyTotals(), cost: 0, start: r.start, end: r.end, msgs: 0 } as Acc);
     a.t = addTotals(a.t, t);
     a.cost += costOf(t, r.model, engine);
     a.start = Math.min(a.start, r.start);
@@ -185,6 +194,7 @@ async function buildSessions(db: D1Database, userId: string, limit = 15): Promis
       id,
       engine: a.engine,
       model: a.model,
+      device: a.device,
       start: a.start,
       end: a.end,
       tokens: a.t,
@@ -269,8 +279,13 @@ export async function personalStats(db: D1Database, userId: string): Promise<Sta
     .bind(userId)
     .first<{ messages: number; earliest: number | null }>();
 
-  const [hourly, topSessions, text, topSwears] = await Promise.all([
-    buildHourly(db, userId),
+  const [hours, devices, topSessions, text, topSwears] = await Promise.all([
+    hourRows(db, userId),
+    db
+      .prepare(`SELECT id, name, platform, arch, last_seen_at FROM devices WHERE user_id = ? ORDER BY created_at`)
+      .bind(userId)
+      .all<DeviceRow>()
+      .then((r) => r.results ?? []),
     buildSessions(db, userId),
     buildText(db, userId),
     buildTopSwears(db, userId),
@@ -285,12 +300,13 @@ export async function personalStats(db: D1Database, userId: string): Promise<Sta
     timeline,
     byModel: buildBreakdown(rows, "model"),
     byEngine: buildBreakdown(rows, "engine"),
-    hourly,
+    hourly: buildHourly(hours),
     topSessions,
     streak: computeStreak(timeline.map((p) => p.day)),
     heatmap: timeline.map((p) => ({ day: p.day, cost: p.cost })),
     text,
     topSwears,
+    cube: buildCube(rows, hours, devices),
   };
 }
 

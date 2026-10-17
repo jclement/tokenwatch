@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./auth";
 import { StatsProvider } from "./data";
+import { FilterProvider } from "./filters";
 import { Spinner } from "./components/ui";
 import { Layout } from "./Layout";
 import { LoginPage } from "./pages/Login";
@@ -9,6 +10,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { OverTime } from "./pages/OverTime";
 import { ByModel } from "./pages/ByModel";
 import { ByEngine } from "./pages/ByEngine";
+import { ByMachine } from "./pages/ByMachine";
 import { Perspective } from "./pages/Perspective";
 import { Confessional } from "./pages/Confessional";
 import { NightOwl } from "./pages/NightOwl";
@@ -45,12 +47,14 @@ function AuthedApp() {
 
   return (
     <StatsProvider>
+      <FilterProvider>
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/over-time" element={<OverTime />} />
           <Route path="/by-model" element={<ByModel />} />
           <Route path="/by-engine" element={<ByEngine />} />
+          <Route path="/by-machine" element={<ByMachine />} />
           <Route path="/perspective" element={<Perspective />} />
           <Route path="/confessional" element={<Confessional />} />
           <Route path="/night-owl" element={<NightOwl />} />
@@ -64,6 +68,7 @@ function AuthedApp() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
+      </FilterProvider>
     </StatsProvider>
   );
 }

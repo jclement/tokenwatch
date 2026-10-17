@@ -11,6 +11,7 @@ export const NAV: NavItem[] = [
   { to: "/over-time", label: "Over Time", icon: "📈", group: "personal" },
   { to: "/by-model", label: "By Model", icon: "🧠", group: "personal" },
   { to: "/by-engine", label: "By Engine", icon: "⚡️", group: "personal" },
+  { to: "/by-machine", label: "By Machine", icon: "🖥️", group: "personal" },
   { to: "/perspective", label: "Perspective", icon: "🔭", group: "personal" },
   { to: "/confessional", label: "Confessional", icon: "🤬", group: "personal" },
   { to: "/night-owl", label: "Night Owl", icon: "🌙", group: "personal" },

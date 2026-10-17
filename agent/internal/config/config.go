@@ -28,7 +28,9 @@ type Fingerprint struct {
 //
 //	2: 1-hour cache writes, merged Claude message lines, Codex repeat skipping
 //	3: same as 2; 0.3.0 never triggered its re-read (see Load)
-const ParseVersion = 3
+//	4: no parser change; re-send once so the server can attribute events
+//	   uploaded before it recorded which machine sent them
+const ParseVersion = 4
 
 // Config is the whole on-disk state, stored as one JSON file.
 type Config struct {

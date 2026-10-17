@@ -22,6 +22,13 @@
       "when": 1790710356497,
       "tag": "0002_dark_wolfpack",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792257262498,
+      "tag": "0003_lowly_leper_queen",
+      "breakpoints": true
     }
   ]
 }

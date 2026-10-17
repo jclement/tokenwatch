@@ -72,6 +72,7 @@ export interface SessionAgg {
   id: string;
   engine: Engine;
   model: string;
+  device: string; // devices.id, "" if unattributed
   start: number;
   end: number;
   tokens: TokenTotals;
@@ -93,6 +94,36 @@ export interface StreakInfo {
   longestEnd: number | null;
 }
 
+// A machine that has uploaded usage. `id` is devices.id; "" collects events
+// ingested before per-machine tracking. `removed` marks a device that has
+// since been unpaired (its events stay).
+export interface MachineInfo {
+  id: string;
+  name: string;
+  platform: string | null;
+  arch: string | null;
+  lastSeenAt: number | null;
+  removed: boolean;
+}
+
+// One model as the cube's dimension: a (engine, model) pair.
+export interface ModelKey {
+  engine: Engine;
+  model: string;
+}
+
+// The filterable fact table behind every chart that honours the filter bar.
+// Rows are compact tuples to keep the payload small; indexes point into
+// `models` and `machines`.
+//   rows:     [day, modelIdx, machineIdx, input, cacheRead, cacheCreate, cacheCreate1h, output, cost]
+//   hourRows: [hour, modelIdx, machineIdx, tokens, cost]
+export interface StatsCube {
+  models: ModelKey[];
+  machines: MachineInfo[];
+  rows: number[][];
+  hourRows: number[][];
+}
+
 // The full personal stats payload powering all dashboard tabs.
 export interface StatsPayload {
   grandTotals: TokenTotals;
@@ -109,6 +140,7 @@ export interface StatsPayload {
   heatmap: { day: number; cost: number }[];
   text: TextTotals;
   topSwears: { word: string; count: number }[];
+  cube: StatsCube;
 }
 
 // ---- Profile / account ------------------------------------------------------

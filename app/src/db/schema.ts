@@ -102,6 +102,9 @@ export const events = sqliteTable(
     ts: integer("ts").notNull().default(0),
     hour: integer("hour").notNull().default(-1),
     session: text("session").notNull().default(""),
+    // devices.id of the machine that uploaded it; "" for rows ingested before
+    // per-machine tracking (a later re-send from that machine fills it in).
+    deviceId: text("device_id").notNull().default(""),
     engine: text("engine").notNull(),
     model: text("model").notNull(),
     input: integer("input").notNull(),

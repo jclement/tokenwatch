@@ -26,12 +26,14 @@ export function StatCard({
   subtitle,
   accent = "mint",
   glow = false,
+  children,
 }: {
   title: string;
   value: string;
   subtitle?: string;
   accent?: keyof typeof ACCENTS | string;
   glow?: boolean;
+  children?: ReactNode;
 }) {
   const accentClass = ACCENTS[accent] ?? "text-mint";
   return (
@@ -39,6 +41,7 @@ export function StatCard({
       <div className="text-[11px] uppercase tracking-wider text-faint">{title}</div>
       <div className={`mt-1 text-3xl font-extrabold tabular-nums ${accentClass}`}>{value}</div>
       {subtitle && <div className="mt-2 text-[12px] leading-snug text-subtle">{subtitle}</div>}
+      {children}
     </GlassCard>
   );
 }
